@@ -1,0 +1,11 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /properties/{propertyId}/{allPaths=**} {
+      // Allow public read for website consumption and internal PWA previews
+      allow read: if true;
+      // Allow write during PWA sessions (Internal use)
+      allow write: if true; 
+    }
+  }
+}

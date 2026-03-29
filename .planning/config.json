@@ -1,0 +1,9 @@
+{
+  "planning": {
+    "commit_docs": true,
+    "search_gitignored": false
+  },
+  "workflow": {
+    "discuss_mode": "discuss"
+  }
+}
