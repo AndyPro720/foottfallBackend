@@ -86,6 +86,9 @@ export const renderHome = async (container) => {
           <div class="card-footer" style="display:flex;align-items:center;gap:var(--space-sm)">
             <span class="status-dot status-active"></span>
             <span class="text-caption">${item.buildingType || 'Property'} · ${item.size ? item.size + ' sqft' : 'Size N/A'}</span>
+            ${window.userProfile?.role === 'admin' ? `
+              <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail || item.createdBy || 'Unknown'}</span>
+            ` : ''}
           </div>
         </a>
       `;

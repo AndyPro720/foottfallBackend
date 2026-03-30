@@ -60,7 +60,7 @@ function renderToggle(field, value = false) {
           <div class="file-upload-zone" data-upload="${field.name}Photo">
             <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <p class="text-caption">Tap to change photo</p>
-            <input type="file" accept="image/*" capture="environment" />
+            <input type="file" accept="image/*" capture="" />
           </div>
         </div>
       ` : ''}
@@ -82,7 +82,7 @@ function renderFileUpload(field, existingUrls = []) {
       </div>
       <div class="file-upload-zone" data-upload="${field.name}" style="margin-top: var(--space-sm)">
         <p class="text-caption">Add more photos...</p>
-        <input type="file" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} capture="environment" />
+        <input type="file" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} capture="" />
       </div>
     </div>
   `;
@@ -242,7 +242,7 @@ export const renderEditProperty = async (container, id) => {
       }
 
       await updateInventoryItem(id, data);
-      const { showToast } = await import('../main.js');
+      const { showToast } = await import('../utils/ui.js');
       showToast('Changes saved successfully', 'success');
       window.location.hash = `#property/${id}`;
     } catch (err) {

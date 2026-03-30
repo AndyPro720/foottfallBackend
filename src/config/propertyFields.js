@@ -39,7 +39,7 @@ export const SECTIONS = [
     id: 'facilities',
     title: 'Facilities',
     fields: [
-      { name: 'parking', label: 'Parking Space', type: 'toggle', hasCount: true, countLabel: 'Number of spots' },
+      { name: 'parking', label: 'Parking Space', type: 'toggle', hasCount: true, countLabel: 'Number of spots', hasPhoto: true },
       { name: 'parkingPhoto', label: 'Parking Photo', type: 'facilityPhoto', condition: 'parking' },
       { name: 'outsideVisibility', label: 'Outside Visibility', type: 'toggle' },
       { name: 'serviceEntry', label: 'Service Entry', type: 'toggle', hasPhoto: true },

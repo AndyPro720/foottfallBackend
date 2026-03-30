@@ -16,6 +16,20 @@ import { renderAdminPage } from './pages/Admin.js';
 
 const app = document.getElementById('app');
 
+// ─── Initial App Shell Render (Zero Latency) ───
+// Render this immediately so the user never stares at a blank green screen while Firebase/IndexedDb initializes
+if (!app.innerHTML.trim()) {
+  app.innerHTML = `
+    <div class="page-header" style="margin-top:20px;">
+      <div class="skeleton skeleton-text" style="width:50%;height:32px"></div>
+    </div>
+    <div class="page-content" style="margin-top:24px;">
+      <div class="skeleton skeleton-card" style="height:120px; animation-duration:1.5s;"></div>
+      <div class="skeleton skeleton-card" style="height:120px; animation-duration:1.5s; animation-delay:50ms;"></div>
+    </div>
+  `;
+}
+
 // Toast system now in utils/ui.js
 
 // ─── Initialize Service Worker ───

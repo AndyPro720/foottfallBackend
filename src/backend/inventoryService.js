@@ -27,6 +27,8 @@ export async function createInventoryItem(data) {
     const writeData = {
       ...data,
       createdBy: auth.currentUser?.uid || "system",
+      creatorEmail: auth.currentUser?.email || "unknown",
+      creatorName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || "unknown",
       created_at: serverTimestamp(),
       updated_at: serverTimestamp(),
     };
