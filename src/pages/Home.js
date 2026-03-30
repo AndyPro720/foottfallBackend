@@ -1,4 +1,5 @@
 import { getInventoryItems } from '../backend/inventoryService.js';
+import { getAllUsers } from '../backend/userRoleService.js';
 
 export const renderHome = async (container) => {
   // Show skeleton while loading
@@ -22,6 +23,19 @@ export const renderHome = async (container) => {
       });
     });
     const isOffline = !navigator.onLine;
+
+    // Admin: Build a UID→name lookup so we can show readable names on cards
+    let userNameMap = {};
+    if (window.userProfile?.role === 'admin') {
+      try {
+        const users = await getAllUsers();
+        users.forEach(u => {
+          userNameMap[u.id] = u.displayName || u.email?.split('@')[0] || 'Unknown';
+        });
+      } catch (e) {
+        // Non-critical, just show fallback names
+      }
+    }
 
     if (!items || items.length === 0) {
       container.innerHTML = `
@@ -87,7 +101,7 @@ export const renderHome = async (container) => {
             <span class="status-dot status-active"></span>
             <span class="text-caption">${item.buildingType || 'Property'} · ${item.size ? item.size + ' sqft' : 'Size N/A'}</span>
             ${window.userProfile?.role === 'admin' ? `
-              <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail || item.createdBy || 'Unknown'}</span>
+              <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail?.split('@')[0] || userNameMap[item.createdBy] || 'Unknown Agent'}</span>
             ` : ''}
           </div>
         </a>

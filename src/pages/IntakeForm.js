@@ -45,7 +45,7 @@ function renderToggle(field) {
           <div class="file-upload-zone" data-upload="${field.name}Photo">
             <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <p class="text-caption">Tap to add photo</p>
-            <input type="file" accept="image/*" capture="" />
+            <input type="file" accept="image/*" />
           </div>
           <div class="file-preview-grid" data-previews="${field.name}Photo"></div>
         </div>
@@ -61,7 +61,7 @@ function renderFileUpload(field) {
       <div class="file-upload-zone" data-upload="${field.name}">
         <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
         <p class="text-caption">${field.multiple ? 'Tap to add photos' : 'Tap to upload'}</p>
-        <input type="file" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} capture="" />
+        <input type="file" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} />
       </div>
       <div class="file-preview-grid" data-previews="${field.name}"></div>
     </div>

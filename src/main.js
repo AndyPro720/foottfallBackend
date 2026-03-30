@@ -16,22 +16,6 @@ import { renderAdminPage } from './pages/Admin.js';
 
 const app = document.getElementById('app');
 
-// ─── Initial App Shell Render (Zero Latency) ───
-// Render this immediately so the user never stares at a blank green screen while Firebase/IndexedDb initializes
-if (!app.innerHTML.trim()) {
-  app.innerHTML = `
-    <div class="page-header" style="margin-top:20px;">
-      <div class="skeleton skeleton-text" style="width:50%;height:32px"></div>
-    </div>
-    <div class="page-content" style="margin-top:24px;">
-      <div class="skeleton skeleton-card" style="height:120px; animation-duration:1.5s;"></div>
-      <div class="skeleton skeleton-card" style="height:120px; animation-duration:1.5s; animation-delay:50ms;"></div>
-    </div>
-  `;
-}
-
-// Toast system now in utils/ui.js
-
 // ─── Initialize Service Worker ───
 const updateSW = registerSW({
   onNeedRefresh() {
@@ -41,7 +25,7 @@ const updateSW = registerSW({
     });
   },
   onOfflineReady() {
-    console.log('App ready to work offline');
+    showToast('App ready for offline use', 'success');
   },
 });
 
@@ -49,12 +33,8 @@ const updateSW = registerSW({
 let deferredPrompt;
 
 window.addEventListener('beforeinstallprompt', (e) => {
-  // Prevent Chrome 67 and earlier from automatically showing the prompt
   e.preventDefault();
-  // Stash the event so it can be triggered later.
   deferredPrompt = e;
-  
-  // Show the install button if it exists
   const installBtn = document.getElementById('pwa-install-btn');
   if (installBtn) {
     installBtn.style.display = 'inline-flex';
@@ -82,7 +62,7 @@ function renderTopBar() {
                 <div class="user-dropdown-header">
                   <div style="display:flex; justify-content:space-between; align-items:center">
                     <p class="text-label" style="color: var(--text-primary)">${userDisplay}</p>
-                    <span class="text-caption" style="font-size: 10px; opacity: 0.5">v1.3.1</span>
+                    <span class="text-caption" style="font-size: 10px; opacity: 0.5">v1.4.0</span>
                   </div>
                   <p class="text-caption">${user.email}</p>
                 </div>
@@ -161,9 +141,9 @@ const router = async () => {
   app.innerHTML = renderSkeleton();
 
   // Ensure top bar is rendered
-  if (!document.querySelector('.top-bar')) {
-    document.body.insertAdjacentHTML('afterbegin', renderTopBar());
-  }
+  const existingTopBar = document.querySelector('.top-bar');
+  if (existingTopBar) existingTopBar.remove();
+  document.body.insertAdjacentHTML('afterbegin', renderTopBar());
 
   // Ensure connectivity banner is rendered
   if (!document.getElementById('connectivity-banner')) {
@@ -196,7 +176,6 @@ const router = async () => {
 
     // Load/Refresh profile for role checks if not in window
     if (!window.userProfile || window.userProfile.uid !== user.uid) {
-      // getCurrentUserProfile now uses a fast cache-first approach
       window.userProfile = await getCurrentUserProfile();
     }
 
@@ -272,14 +251,22 @@ VITE_FIREBASE_APP_ID=your_app_id</pre>
 
 window.addEventListener('hashchange', router);
 
-// Handle Auth State
+// ─── Auth State & Boot Sequence ───
+// CRITICAL: Firebase's onAuthStateChanged can take SECONDS to fire when offline
+// because it needs to restore the user from IndexedDB. We cannot wait for it.
+// Instead, we set a timeout: if auth hasn't resolved in 1.5s, call router() anyway
+// so the user sees SOMETHING instead of a blank green screen.
+
+let authResolved = false;
+
 onAuthStateChanged(auth, (user) => {
+  authResolved = true;
   if (user) {
     syncUserProfile(user).catch(err => console.error('Sync profile error:', err));
   }
   router();
   
-  // Set up listeners after DOM updates (on each router run)
+  // Set up listeners after DOM updates
   setTimeout(() => {
     const logoutBtn = document.getElementById('btn-logout');
     if (logoutBtn) {
@@ -308,5 +295,23 @@ onAuthStateChanged(auth, (user) => {
         deferredPrompt = null;
       };
     }
-  }, 100);
+
+    // Profile dropdown toggle
+    const profileTrigger = document.getElementById('user-profile-trigger');
+    if (profileTrigger) {
+      profileTrigger.onclick = (e) => {
+        e.stopPropagation();
+        document.getElementById('user-dropdown')?.classList.toggle('show');
+      };
+    }
+  }, 150);
 });
+
+// Failsafe: If onAuthStateChanged hasn't fired after 1.5s, render the app anyway
+// This prevents the infinite green screen when opening the PWA offline
+setTimeout(() => {
+  if (!authResolved) {
+    console.warn('Auth did not resolve in 1.5s, rendering app shell anyway.');
+    router();
+  }
+}, 1500);
