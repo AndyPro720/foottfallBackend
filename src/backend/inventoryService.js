@@ -1,6 +1,6 @@
 import { 
   collection, doc, getDoc, getDocs, updateDoc, deleteDoc, setDoc,
-  query, where, serverTimestamp, getDocsFromCache, getDocsFromServer 
+  query, where, serverTimestamp, getDocsFromCache, getDocsFromServer, getDocFromCache, getDocFromServer
 } from "firebase/firestore";
 import { db, auth } from "./firebaseConfig.js";
 import { getCurrentUserRole } from "./userRoleService.js";
@@ -57,12 +57,40 @@ export async function createInventoryItem(data) {
 /**
  * Gets a single inventory item by ID.
  * @param {string} id The document ID.
+ * @param {Function} onNewData Optional callback fired if background sync finds updated data.
  * @returns {Promise<Object|null>} The document data or null if not found.
  */
-export async function getInventoryItemById(id) {
+export async function getInventoryItemById(id, onNewData = null) {
   try {
     const docRef = doc(db, INVENTORY_COLLECTION, id);
-    const docSnap = await withTimeout(getDoc(docRef), 8000);
+    
+    // 1. Try Cache First for zero-latency load
+    try {
+      const cacheSnap = await getDocFromCache(docRef);
+      if (cacheSnap.exists()) {
+        const cachedItem = { id: cacheSnap.id, ...cacheSnap.data() };
+        
+        // 2. Background Sync
+        if (navigator.onLine) {
+          getDocFromServer(docRef).then(serverSnap => {
+            if (serverSnap.exists()) {
+              const serverItem = { id: serverSnap.id, ...serverSnap.data() };
+              // Basic diff calculation
+              if (JSON.stringify(cachedItem) !== JSON.stringify(serverItem)) {
+                if (onNewData) onNewData(serverItem);
+              }
+            }
+          }).catch(e => console.warn("Background detail sync failed", e));
+        }
+        
+        return cachedItem;
+      }
+    } catch (e) {
+      // Ignore cache misses
+    }
+
+    // 3. Fallback to quick server read
+    const docSnap = await withTimeout(getDocFromServer(docRef), 5000, "Server read timeout");
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() };
     } else {
@@ -70,6 +98,7 @@ export async function getInventoryItemById(id) {
       return null;
     }
   } catch (error) {
+    if (error.message === "Server read timeout") return null; // Graceful offline/timeout
     console.error("Error getting inventory item:", error);
     throw error;
   }
@@ -78,9 +107,10 @@ export async function getInventoryItemById(id) {
 /**
  * Gets inventory items, optionally filtered.
  * @param {Object} filters Key-value pairs matching Firestore fields (simple equality).
+ * @param {Function} onNewData Optional callback fired if background sync finds updated data.
  * @returns {Promise<Array>} Array of inventory documents.
  */
-export async function getInventoryItems(filters = {}) {
+export async function getInventoryItems(filters = {}, onNewData = null) {
   try {
     let q = query(collection(db, INVENTORY_COLLECTION));
 
@@ -98,34 +128,43 @@ export async function getInventoryItems(filters = {}) {
       q = query(q, where(key, "==", value));
     }
 
-    // If specifically offline, don't even try the server
-    if (!navigator.onLine) {
+    // 1. Try Cache First for Instant Rendering
+    try {
       const cacheSnapshot = await getDocsFromCache(q);
-      return cacheSnapshot.docs.map(d => ({ 
-        id: d.id, 
-        ...d.data(),
-        syncPending: d.metadata.hasPendingWrites
-      }));
+      if (!cacheSnapshot.empty) {
+        const cachedItems = cacheSnapshot.docs.map(d => ({ 
+          id: d.id, ...d.data(), syncPending: d.metadata.hasPendingWrites
+        }));
+        
+        // 2. Queue Background Background Sync
+        if (navigator.onLine) {
+          getDocsFromServer(q).then(serverSnapshot => {
+            const serverItems = serverSnapshot.docs.map(d => ({ 
+              id: d.id, ...d.data(), syncPending: d.metadata.hasPendingWrites
+            }));
+            
+            // Basic data diff logic
+            if (JSON.stringify(cachedItems) !== JSON.stringify(serverItems)) {
+              if (onNewData) onNewData(serverItems);
+            }
+          }).catch(e => console.warn("Background list sync failed", e));
+        }
+
+        return cachedItems;
+      }
+    } catch (e) {
+      // Ignore cache read failures 
     }
 
+    // 3. Cache Miss: We MUST wait for the network, but use a tighter timeout
     try {
-      const querySnapshot = await withTimeout(
-        getDocs(q),
-        8000
-      );
-      return querySnapshot.docs.map(d => ({ 
-        id: d.id, 
-        ...d.data(),
-        syncPending: d.metadata.hasPendingWrites
+      const serverSnapshot = await withTimeout(getDocsFromServer(q), 5000, "Server timeout");
+      return serverSnapshot.docs.map(d => ({ 
+        id: d.id, ...d.data(), syncPending: d.metadata.hasPendingWrites
       }));
-    } catch (err) {
-      console.warn("Server query failed or timed out, falling back to cache:", err);
-      const cacheSnapshot = await getDocsFromCache(q);
-      return cacheSnapshot.docs.map(d => ({ 
-        id: d.id, 
-        ...d.data(),
-        syncPending: d.metadata.hasPendingWrites
-      }));
+    } catch (e) {
+      if (e.message === "Server timeout") return []; // Return gracefully instead of crashing UI
+      throw e;
     }
   } catch (error) {
     console.error("Error fetching inventory items:", error);

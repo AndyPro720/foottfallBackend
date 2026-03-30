@@ -1,4 +1,5 @@
 import './style.css';
+import { registerSW } from 'virtual:pwa-register';
 import { auth } from './backend/firebaseConfig';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { syncUserProfile, getCurrentUserProfile } from './backend/userRoleService';
@@ -16,6 +17,35 @@ import { renderAdminPage } from './pages/Admin.js';
 const app = document.getElementById('app');
 
 // Toast system now in utils/ui.js
+
+// ─── Initialize Service Worker ───
+const updateSW = registerSW({
+  onNeedRefresh() {
+    showToast('New update available', 'info', {
+      text: 'Update Now',
+      onClick: () => updateSW(true)
+    });
+  },
+  onOfflineReady() {
+    console.log('App ready to work offline');
+  },
+});
+
+// ─── PWA Install Prompt Logic ───
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Prevent Chrome 67 and earlier from automatically showing the prompt
+  e.preventDefault();
+  // Stash the event so it can be triggered later.
+  deferredPrompt = e;
+  
+  // Show the install button if it exists
+  const installBtn = document.getElementById('pwa-install-btn');
+  if (installBtn) {
+    installBtn.style.display = 'inline-flex';
+  }
+});
 
 // ─── Top Bar with Logo ───
 function renderTopBar() {
@@ -36,12 +66,18 @@ function renderTopBar() {
               <div class="user-avatar">${initial}</div>
               <div class="user-dropdown" id="user-dropdown">
                 <div class="user-dropdown-header">
-                  <p class="text-label" style="color: var(--text-primary)">${userDisplay}</p>
+                  <div style="display:flex; justify-content:space-between; align-items:center">
+                    <p class="text-label" style="color: var(--text-primary)">${userDisplay}</p>
+                    <span class="text-caption" style="font-size: 10px; opacity: 0.5">v1.3.0</span>
+                  </div>
                   <p class="text-caption">${user.email}</p>
                 </div>
                 ${window.userProfile?.role === 'admin' ? `
                   <a href="#admin" class="btn-secondary" style="display:block; text-align:center; padding: 4px; font-size: 12px; margin-top: 8px; text-decoration:none">Admin Panel</a>
                 ` : ''}
+                <button class="btn-primary" id="pwa-install-btn" style="display: ${deferredPrompt ? 'inline-flex' : 'none'}; min-height: 36px; padding: 4px 12px; font-size: 12px; margin-top: 8px; width: 100%;">
+                  Install App
+                </button>
                 <button class="btn-secondary" id="btn-logout" style="min-height: 36px; padding: 4px 12px; font-size: 12px; margin-top: 8px; width: 100%;">
                   Sign Out
                 </button>
@@ -146,6 +182,7 @@ const router = async () => {
 
     // Load/Refresh profile for role checks if not in window
     if (!window.userProfile || window.userProfile.uid !== user.uid) {
+      // getCurrentUserProfile now uses a fast cache-first approach
       window.userProfile = await getCurrentUserProfile();
     }
 
@@ -222,13 +259,13 @@ VITE_FIREBASE_APP_ID=your_app_id</pre>
 window.addEventListener('hashchange', router);
 
 // Handle Auth State
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(auth, (user) => {
   if (user) {
-    await syncUserProfile(user);
+    syncUserProfile(user).catch(err => console.error('Sync profile error:', err));
   }
   router();
   
-  // Set up logout listener after DOM updates (on each router run)
+  // Set up listeners after DOM updates (on each router run)
   setTimeout(() => {
     const logoutBtn = document.getElementById('btn-logout');
     if (logoutBtn) {
@@ -239,6 +276,22 @@ onAuthStateChanged(auth, async (user) => {
         } catch (err) {
           showToast(err.message, 'error');
         }
+      };
+    }
+
+    const installBtn = document.getElementById('pwa-install-btn');
+    if (installBtn) {
+      installBtn.onclick = async () => {
+        if (!deferredPrompt) return;
+        
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        
+        if (outcome === 'accepted') {
+          console.log('User accepted the A2HS prompt');
+          installBtn.style.display = 'none';
+        }
+        deferredPrompt = null;
       };
     }
   }, 100);

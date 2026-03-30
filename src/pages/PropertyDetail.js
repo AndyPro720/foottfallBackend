@@ -14,7 +14,14 @@ export const renderPropertyDetail = async (container, id) => {
   `;
 
   try {
-    const item = await getInventoryItemById(id);
+    const item = await getInventoryItemById(id, (newItem) => {
+      import('../utils/ui.js').then(({ showToast }) => {
+        showToast('Updated data available', 'info', {
+          text: 'Refresh',
+          onClick: () => renderPropertyDetail(container, id)
+        });
+      });
+    });
 
     if (!item) {
       container.innerHTML = `
@@ -137,7 +144,7 @@ export const renderPropertyDetail = async (container, id) => {
     const statusSelect = document.getElementById('status-select');
     statusSelect.onchange = async () => {
       const newStatus = statusSelect.value;
-      const { showToast } = await import('../main.js');
+      const { showToast } = await import('../utils/ui.js');
       try {
         await updateInventoryItem(id, { status: newStatus });
         showToast(`Status updated to ${newStatus}`, 'success');
@@ -150,7 +157,7 @@ export const renderPropertyDetail = async (container, id) => {
 
     // ─── Delete handler ───
     document.getElementById('delete-btn').onclick = async () => {
-      const { showToast } = await import('../main.js');
+      const { showToast } = await import('../utils/ui.js');
       if (confirm('Are you sure you want to delete this property? This action is permanent.')) {
         try {
           await deleteInventoryItem(id);

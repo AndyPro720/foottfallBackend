@@ -1,5 +1,5 @@
 import { db, auth } from './firebaseConfig';
-import { doc, getDoc, setDoc, getDocs, collection, query, orderBy, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocFromCache, setDoc, getDocs, collection, query, orderBy, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 /**
  * Ensures a user document exists in Firestore and returns the user's role.
@@ -31,15 +31,35 @@ export async function syncUserProfile(user) {
 }
 
 /**
- * Fetches the document of the current user
+ * Fetches the document of the current user, prioritizing fast offline cache.
  */
 export async function getCurrentUserProfile() {
   const user = auth.currentUser;
   if (!user) return null;
   
   const userDocRef = doc(db, 'users', user.uid);
-  const userSnap = await getDoc(userDocRef);
-  return userSnap.exists() ? userSnap.data() : null;
+  
+  try {
+    // Try instant cache retrieval first
+    const cacheSnap = await getDocFromCache(userDocRef);
+    if (cacheSnap.exists()) {
+      // NOTE: Security rules must enforce access control on the backend.
+      // Caching roles locally is for UX rendering speed only.
+      return cacheSnap.data();
+    }
+  } catch (e) {
+    // Cache miss or error, fallback to server silently
+  }
+
+  // Fallback to server if cache is empty
+  try {
+    const userSnap = await getDoc(userDocRef);
+    return userSnap.exists() ? userSnap.data() : null;
+  } catch (e) {
+    console.warn("Could not fetch user profile from server.", e);
+    // Safe fallback so the app doesn't crash completely offline for returning users with cleared cache
+    return { uid: user.uid, role: 'agent', status: 'pending' };
+  }
 }
 
 /**

@@ -13,7 +13,14 @@ export const renderHome = async (container) => {
   `;
 
   try {
-    const items = await getInventoryItems();
+    const items = await getInventoryItems({}, (newItems) => {
+      import('../utils/ui.js').then(({ showToast }) => {
+        showToast('Updated data available', 'info', {
+          text: 'Refresh',
+          onClick: () => renderHome(container)
+        });
+      });
+    });
     const isOffline = !navigator.onLine;
 
     if (!items || items.length === 0) {
@@ -108,7 +115,7 @@ export const renderHome = async (container) => {
     // ─── Export Trigger Handler ───
     document.getElementById('export-trigger').onclick = async () => {
       const btn = document.getElementById('export-trigger');
-      const { showToast } = await import('../main.js');
+      const { showToast } = await import('../utils/ui.js');
       btn.disabled = true;
       btn.textContent = 'Exporting...';
       
