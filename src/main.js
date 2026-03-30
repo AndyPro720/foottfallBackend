@@ -82,7 +82,7 @@ function renderTopBar() {
                 <div class="user-dropdown-header">
                   <div style="display:flex; justify-content:space-between; align-items:center">
                     <p class="text-label" style="color: var(--text-primary)">${userDisplay}</p>
-                    <span class="text-caption" style="font-size: 10px; opacity: 0.5">v1.3.0</span>
+                    <span class="text-caption" style="font-size: 10px; opacity: 0.5">v1.3.1</span>
                   </div>
                   <p class="text-caption">${user.email}</p>
                 </div>
