@@ -104,22 +104,9 @@ export const renderPropertyDetail = async (container, id) => {
               <div class="detail-item" style="grid-column: 1 / -1">
                 <span class="text-label" style="margin-bottom: var(--space-xs)">Pinned Location</span>
                 <div id="static-map" class="static-map-preview"></div>
-                <script>
-                  setTimeout(() => {
-                    const smap = L.map('static-map', { 
-                      zoomControl: false, 
-                      dragging: false, 
-                      touchZoom: false, 
-                      scrollWheelZoom: false,
-                      doubleClickZoom: false,
-                      boxZoom: false
-                    }).setView([${item.latitude}, ${item.longitude}], 15);
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(smap);
-                    L.marker([${item.latitude}, ${item.longitude}]).addTo(smap);
-                  }, 500);
-                </script>
               </div>
             ` : ''}
+
           </div>
 
         </div>
@@ -162,11 +149,18 @@ export const renderPropertyDetail = async (container, id) => {
           }
         </div>
         ${allMedia.length > 1 ? `
+          <button class="slider-nav-btn slider-nav-prev" id="slider-prev" aria-label="Previous">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+          </button>
+          <button class="slider-nav-btn slider-nav-next" id="slider-next" aria-label="Next">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+          </button>
           <div class="slider-dots" id="slider-dots">
             ${allMedia.map((_, i) => `<div class="slider-dot ${i === 0 ? 'active' : ''}"></div>`).join('')}
           </div>
         ` : ''}
       </div>
+
 
       <div class="page-header animate-enter">
         <div style="display:flex; justify-content:space-between; align-items:flex-start">
@@ -200,15 +194,41 @@ export const renderPropertyDetail = async (container, id) => {
       </div>
     `;
 
-    // ─── Slider pagination logic ───
+    // ─── Slider pagination & nav logic ───
     const slider = document.getElementById('detail-slider');
     const dots = document.querySelectorAll('.slider-dot');
-    if (slider && dots.length > 0) {
-      slider.onscroll = () => {
-        const index = Math.round(slider.scrollLeft / slider.offsetWidth);
-        dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
-      };
+    if (slider) {
+      if (dots.length > 0) {
+        slider.onscroll = () => {
+          const index = Math.round(slider.scrollLeft / slider.offsetWidth);
+          dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+        };
+      }
+      
+      const prevBtn = document.getElementById('slider-prev');
+      const nextBtn = document.getElementById('slider-next');
+      if (prevBtn) prevBtn.onclick = () => slider.scrollBy({ left: -slider.offsetWidth, behavior: 'smooth' });
+      if (nextBtn) nextBtn.onclick = () => slider.scrollBy({ left: slider.offsetWidth, behavior: 'smooth' });
     }
+
+    // ─── Phase 9: Initialize Detail Map ───
+    if (item.latitude && item.longitude) {
+      setTimeout(() => {
+        const mapEl = document.getElementById('static-map');
+        if (!mapEl || !L) return;
+        const smap = L.map('static-map', { 
+          zoomControl: false, 
+          dragging: false, 
+          touchZoom: false, 
+          scrollWheelZoom: false,
+          doubleClickZoom: false,
+          boxZoom: false
+        }).setView([item.latitude, item.longitude], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(smap);
+        L.marker([item.latitude, item.longitude]).addTo(smap);
+      }, 500);
+    }
+
 
     // ─── Lightbox logic ───
 
@@ -274,7 +294,52 @@ export const renderPropertyDetail = async (container, id) => {
 };
 
 function renderPhotoGallery(item) {
-  // Legacy function - hidden in Phase 9 as media moved to the top slider
-  return '';
+  const photoCategories = [
+    { key: 'buildingFacade', label: 'Building Facade' },
+    { key: 'unitFacade', label: 'Unit Facade' },
+    { key: 'interior', label: 'Interior' },
+    { key: 'signage', label: 'Signage' },
+    { key: 'floorPlan', label: 'Floor Plan' }
+  ];
+
+  const categoriesHtml = photoCategories.map(cat => {
+    const urls = item.images?.[cat.key] || [];
+    if (urls.length === 0) return '';
+
+    const isVideo = (url) => /\.(mp4|webm|mov|avi|mkv)/i.test(url);
+    const isPdf = (url) => /\.pdf/i.test(url);
+
+    return `
+      <div style="margin-bottom: var(--space-md)">
+        <p class="text-label" style="margin-bottom: var(--space-xs); font-weight: 600; color: var(--text-secondary)">${cat.label}</p>
+        <div class="photo-scroll-row">
+          ${urls.map(url => `
+            <div class="photo-row-item" onclick="window.openLightbox('${url}')">
+              ${isVideo(url)
+                ? `<video src="${url}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
+                : isPdf(url)
+                  ? `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--bg-raised)"><svg width="24" height="24" fill="none" stroke="var(--text-tertiary)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div>`
+                  : `<img src="${url}" loading="lazy" />`
+              }
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (!categoriesHtml) return '';
+
+  return `
+    <div class="card animate-enter" style="margin-bottom: var(--space-md)">
+      <div class="card-header">
+        <h3 class="text-subheading" style="color: var(--accent-green)">Media Explorer</h3>
+      </div>
+      <div class="card-body">
+        ${categoriesHtml}
+      </div>
+    </div>
+  `;
 }
+
 

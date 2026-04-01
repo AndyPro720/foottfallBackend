@@ -87,11 +87,21 @@ function renderField(field) {
   if (field.name === 'location') {
     html += `
       <div id="map-picker-container" class="form-group animate-enter" style="--delay:200ms">
-        <p class="text-caption">Tap on the map to drop a pin for exact location</p>
+        <label class="form-label">Property Pin Location (Voluntary)</label>
+        <div style="display:flex; gap:var(--space-sm); margin-bottom:var(--space-sm)">
+          <button type="button" class="btn-secondary" id="gps-btn" style="flex:1; min-height:36px; font-size:12px">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            Use My Location
+          </button>
+          <button type="button" class="btn-secondary" id="clear-pin-btn" style="flex:1; min-height:36px; font-size:12px; border-color:var(--destructive); color:var(--destructive)">
+            Clear Pin
+          </button>
+        </div>
         <div id="map-picker"></div>
         <input type="hidden" id="latitude" name="latitude" />
         <input type="hidden" id="longitude" name="longitude" />
       </div>
+
     `;
   }
   return html;
@@ -185,67 +195,98 @@ export const renderIntakeForm = (container) => {
 
     zone.addEventListener('click', () => input.click());
 
-    input.addEventListener('change', () => {
+    input.addEventListener('change', async () => {
       if (!previewGrid) return;
       previewGrid.innerHTML = '';
-      Array.from(input.files).forEach(file => {
-        if (file.type.startsWith('image/')) {
-          const img = document.createElement('img');
-          img.className = 'file-preview-thumb';
-          img.src = URL.createObjectURL(file);
-          previewGrid.appendChild(img);
-        } else if (file.type.startsWith('video/')) {
-          const vid = document.createElement('video');
-          vid.className = 'file-preview-thumb';
-          vid.src = URL.createObjectURL(file);
-          vid.muted = true;
-          vid.preload = 'metadata';
-          previewGrid.appendChild(vid);
-        } else {
-          const div = document.createElement('div');
-          div.className = 'badge';
-          div.textContent = file.name;
-          previewGrid.appendChild(div);
+
+      const maxSizeBytes = 50 * 1024 * 1024; // 50MB
+      let hasOversized = false;
+
+      for (const file of Array.from(input.files)) {
+        if (file.size > maxSizeBytes) {
+          hasOversized = true;
+          continue;
         }
-      });
+
+        const devDiv = document.createElement('div');
+        devDiv.className = 'file-preview-item';
+        previewGrid.appendChild(devDiv);
+
+        try {
+          let displayUrl = URL.createObjectURL(file);
+          let isVideo = file.type.startsWith('video/');
+          let isHeic = file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic';
+
+          if (isHeic) {
+            devDiv.innerHTML = '<div class="converting-badge">Converting...</div>';
+            const { default: heicTo } = await import('https://cdn.jsdelivr.net/npm/heic-to@1.4.2/+esm');
+            const jpegBlob = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.7 });
+            displayUrl = URL.createObjectURL(jpegBlob);
+            devDiv.innerHTML = ''; // Clear badge
+          }
+
+          if (isVideo) {
+            const vid = document.createElement('video');
+            vid.className = 'file-preview-thumb';
+            vid.src = displayUrl;
+            vid.muted = true;
+            vid.onloadedmetadata = () => vid.currentTime = 1; // Show thumbnail
+            devDiv.appendChild(vid);
+          } else if (file.type.startsWith('image/') || isHeic) {
+            const img = document.createElement('img');
+            img.className = 'file-preview-thumb';
+            img.src = displayUrl;
+            img.loading = 'lazy';
+            devDiv.appendChild(img);
+          } else {
+            devDiv.innerHTML = `<div class="badge">${file.name}</div>`;
+          }
+        } catch (err) {
+          console.error('Preview error:', err);
+          devDiv.innerHTML = `<div class="badge error">Preview Error</div>`;
+        }
+      }
+
+      if (hasOversized) {
+        showToast('Some files skipped (Max 50MB limit)', 'error');
+      }
     });
   });
 
-  // ─── Phase 9: Initialize Map ───
+    // ─── Phase 9: Initialize Map ───
   let map, marker;
   setTimeout(() => {
     const mapEl = document.getElementById('map-picker');
     if (!mapEl) return;
 
-    // Use a default location (e.g. New Delhi) or user's GPS
-    const defaultPos = [28.6139, 77.2090];
+    // Start at a broad view (India)
+    const defaultPos = [20.5937, 78.9629];
     map = L.map('map-picker', {
-      zoomControl: false,
+      zoomControl: true,
       dragging: !L.Browser.mobile,
       tap: !L.Browser.mobile
-    }).setView(defaultPos, 13);
+    }).setView(defaultPos, 5);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap'
     }).addTo(map);
 
-    // Try to get current GPS
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        const { latitude, longitude } = position.coords;
-        map.setView([latitude, longitude], 16);
-        updateMarker(latitude, longitude);
-      }, (err) => {
-        console.warn('Geolocation failed:', err);
-      }, { timeout: 5000 });
+    // Add Search Bar
+    if (L.Control.Geocoder) {
+      const geocoder = L.Control.geocoder({
+        defaultMarkGeocode: false,
+        placeholder: 'Search address...',
+      }).on('markgeocode', function(e) {
+        const center = e.geocode.center;
+        map.setView(center, 16);
+        updateMarker(center.lat, center.lng);
+      }).addTo(map);
     }
 
     function updateMarker(lat, lng) {
-      const latInput = document.getElementById('latitude');
-      const lngInput = document.getElementById('longitude');
-      if (latInput) latInput.value = lat;
-      if (lngInput) lngInput.value = lng;
+      document.getElementById('latitude').value = lat;
+      document.getElementById('longitude').value = lng;
 
       if (marker) {
         marker.setLatLng([lat, lng]);
@@ -262,9 +303,32 @@ export const renderIntakeForm = (container) => {
       updateMarker(e.latlng.lat, e.latlng.lng);
     });
 
-    // Fix map size after animations
+    // "Use My Location" Button
+    document.getElementById('gps-btn').onclick = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const { latitude, longitude } = pos.coords;
+          map.setView([latitude, longitude], 17);
+          updateMarker(latitude, longitude);
+        }, (err) => showToast('GPS failed: ' + err.message, 'error'));
+      } else {
+        showToast('GPS not supported', 'error');
+      }
+    };
+
+    // "Clear Pin" Button
+    document.getElementById('clear-pin-btn').onclick = () => {
+      if (marker) {
+        map.removeLayer(marker);
+        marker = null;
+      }
+      document.getElementById('latitude').value = '';
+      document.getElementById('longitude').value = '';
+    };
+
     setTimeout(() => map.invalidateSize(), 500);
   }, 100);
+
 
   // ─── Form submission ───
 

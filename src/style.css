@@ -833,8 +833,10 @@ a { color: inherit; text-decoration: none; }
   flex: 0 0 100%;
   height: 100%;
   scroll-snap-align: start;
+  scroll-snap-stop: always;
   position: relative;
 }
+
 
 .slider-item img, .slider-item video {
   width: 100%;
@@ -867,7 +869,40 @@ a { color: inherit; text-decoration: none; }
   transform: scale(1.2);
 }
 
+.slider-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 20;
+  transition: background var(--transition-fast);
+  opacity: 0; /* Hidden by default, shown on touch/hover */
+}
+
+.slider-container:hover .slider-nav-btn, .slider-container:active .slider-nav-btn {
+  opacity: 1;
+}
+
+.slider-nav-prev { left: var(--space-md); }
+.slider-nav-next { right: var(--space-md); }
+
+.slider-nav-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
 /* ========== MAP PICKER (Phase 9) ========== */
+
 
 #map-picker {
   width: 100%;
@@ -891,7 +926,27 @@ a { color: inherit; text-decoration: none; }
 .leaflet-container {
   background: var(--bg-base) !important;
   font-family: inherit;
+  z-index: 1;
 }
+
+.leaflet-control-geocoder {
+  z-index: 1001 !important;
+}
+
+/* ========== CONVERTING BADGE (Phase 9) ========== */
+.converting-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.7);
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: white;
+  font-size: 10px;
+  z-index: 10;
+}
+
 
 .photo-scroll-row::-webkit-scrollbar {
   display: none;
