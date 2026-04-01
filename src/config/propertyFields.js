@@ -5,6 +5,7 @@ export const SECTIONS = [
   {
     id: 'property-info',
     title: 'Property Information',
+    collapsed: false,
     fields: [
       { name: 'name', label: 'Property Name', type: 'text', required: true, placeholder: 'e.g., Phoenix Mall Unit 204' },
       { name: 'buildingType', label: 'Building Type', type: 'select', options: ['Mall', 'Standalone', 'High Street'], required: true },
@@ -17,6 +18,7 @@ export const SECTIONS = [
   {
     id: 'contact',
     title: 'Contact Details',
+    collapsed: true,
     fields: [
       { name: 'contactName', label: 'Contact Name', type: 'text', required: true, placeholder: 'Full name' },
       { name: 'contactDesignation', label: 'Designation', type: 'text', placeholder: 'e.g., Leasing Manager' },
@@ -26,6 +28,7 @@ export const SECTIONS = [
   {
     id: 'specs',
     title: 'Unit Specifications',
+    collapsed: true,
     fields: [
       { name: 'size', label: 'Size (sq ft)', type: 'number', required: true, placeholder: 'Carpet area' },
       { name: 'price', label: 'Price per Sq Ft (₹)', type: 'number', required: true, placeholder: '₹/sqft' },
@@ -38,29 +41,27 @@ export const SECTIONS = [
   {
     id: 'facilities',
     title: 'Facilities',
+    collapsed: true,
     fields: [
       { name: 'parking', label: 'Parking Space', type: 'toggle', hasCount: true, countLabel: 'Number of spots', hasPhoto: true },
-      { name: 'parkingPhoto', label: 'Parking Photo', type: 'facilityPhoto', condition: 'parking' },
       { name: 'outsideVisibility', label: 'Outside Visibility', type: 'toggle' },
       { name: 'serviceEntry', label: 'Service Entry', type: 'toggle', hasPhoto: true },
-      { name: 'serviceEntryPhoto', label: 'Service Entry Photo', type: 'facilityPhoto', condition: 'serviceEntry' },
       { name: 'liftAccess', label: 'Lift Access', type: 'toggle', hasPhoto: true },
-      { name: 'liftAccessPhoto', label: 'Lift Access Photo', type: 'facilityPhoto', condition: 'liftAccess' },
       { name: 'bohSpace', label: 'BOH Space', type: 'toggle', hasPhoto: true },
-      { name: 'bohSpacePhoto', label: 'BOH Space Photo', type: 'facilityPhoto', condition: 'bohSpace' },
       { name: 'fireExit', label: 'Fire Exit', type: 'toggle' },
       { name: 'ocFile', label: 'OC File Available', type: 'toggle' },
     ]
   },
   {
     id: 'photos',
-    title: 'Photos & Documents',
+    title: 'Photos, Videos & Documents',
+    collapsed: true,
     fields: [
-      { name: 'buildingFacade', label: 'Building Facade', type: 'file', accept: 'image/*', multiple: true },
-      { name: 'unitFacade', label: 'Unit Facade', type: 'file', accept: 'image/*', multiple: true },
-      { name: 'interior', label: 'Interior', type: 'file', accept: 'image/*', multiple: true },
-      { name: 'signage', label: 'Signage', type: 'file', accept: 'image/*', multiple: true },
-      { name: 'floorPlan', label: 'Floor Plan', type: 'file', accept: 'image/*,.pdf' },
+      { name: 'buildingFacade', label: 'Building Facade', type: 'file', accept: 'image/*,video/*', multiple: true },
+      { name: 'unitFacade', label: 'Unit Facade', type: 'file', accept: 'image/*,video/*', multiple: true },
+      { name: 'interior', label: 'Interior', type: 'file', accept: 'image/*,video/*', multiple: true },
+      { name: 'signage', label: 'Signage', type: 'file', accept: 'image/*,video/*', multiple: true },
+      { name: 'floorPlan', label: 'Floor Plan', type: 'file', accept: 'image/*,video/*,.pdf' },
     ]
   }
 ];

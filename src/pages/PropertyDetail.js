@@ -68,7 +68,7 @@ export const renderPropertyDetail = async (container, id) => {
           `;
         }
 
-        if (field.type === 'facilityPhoto') return ''; // Handled within toggle above
+        if (field.type === 'facilityPhoto') return ''; // Legacy: handled within toggle above
 
         if (!value) return '';
 
@@ -131,13 +131,27 @@ export const renderPropertyDetail = async (container, id) => {
     window.openLightbox = (src) => {
       const overlay = document.createElement('div');
       overlay.className = 'lightbox-overlay active';
+      const isVideo = /\.(mp4|webm|mov|avi|mkv)/i.test(src);
       overlay.innerHTML = `
-        <img src="${src}" class="lightbox-img" />
+        ${isVideo 
+          ? `<video src="${src}" class="lightbox-img" controls autoplay style="max-width:90%;max-height:90%"></video>`
+          : `<img src="${src}" class="lightbox-img" />`
+        }
         <button class="lightbox-close">&times;</button>
       `;
       document.body.appendChild(overlay);
-      overlay.querySelector('.lightbox-close').onclick = () => overlay.remove();
-      overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
+      overlay.querySelector('.lightbox-close').onclick = () => {
+        const vid = overlay.querySelector('video');
+        if (vid) vid.pause();
+        overlay.remove();
+      };
+      overlay.onclick = (e) => { 
+        if(e.target === overlay) {
+          const vid = overlay.querySelector('video');
+          if (vid) vid.pause();
+          overlay.remove(); 
+        }
+      };
     };
 
     // ─── Status update handler ───
@@ -188,13 +202,18 @@ function renderPhotoGallery(item) {
     const urls = item.images?.[cat.key] || [];
     if (urls.length === 0) return '';
 
+    const isVideo = (url) => /\.(mp4|webm|mov|avi|mkv)/i.test(url);
+
     return `
       <div style="margin-bottom: var(--space-lg)">
         <p class="text-label" style="margin-bottom: var(--space-sm)">${cat.label}</p>
         <div class="photo-scroll-row">
           ${urls.map(url => `
             <div class="photo-row-item" onclick="window.openLightbox('${url}')">
-              <img src="${url}" loading="lazy" />
+              ${isVideo(url)
+                ? `<video src="${url}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
+                : `<img src="${url}" loading="lazy" />`
+              }
             </div>
           `).join('')}
         </div>

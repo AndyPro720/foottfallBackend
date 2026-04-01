@@ -8,7 +8,6 @@ function renderField(field, value) {
   if (field.type === 'select') return renderSelect(field, value);
   if (field.type === 'toggle') return renderToggle(field, value);
   if (field.type === 'file') return renderFileUpload(field, value);
-  if (field.type === 'facilityPhoto') return ''; // Handled inside toggle
   return renderTextField(field, value);
 }
 
@@ -59,8 +58,8 @@ function renderToggle(field, value = false) {
           </div>
           <div class="file-upload-zone" data-upload="${field.name}Photo">
             <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-            <p class="text-caption">Tap to change photo</p>
-            <input type="file" accept="image/*" />
+            <p class="text-caption">Tap to change photo/video</p>
+            <input type="file" accept="image/*,video/*" />
           </div>
         </div>
       ` : ''}
@@ -69,19 +68,23 @@ function renderToggle(field, value = false) {
 }
 
 function renderFileUpload(field, existingUrls = []) {
+  const isVideo = (url) => /\.(mp4|webm|mov|avi|mkv)/i.test(url);
   return `
     <div class="form-group">
       <label class="form-label">${field.label}</label>
       <div class="file-preview-grid" data-previews="${field.name}">
         ${(existingUrls || []).map(url => `
           <div class="file-preview-item">
-            <img src="${url}" class="file-preview-thumb" />
+            ${isVideo(url) 
+              ? `<video src="${url}" class="file-preview-thumb" muted preload="metadata"></video>`
+              : `<img src="${url}" class="file-preview-thumb" />`
+            }
             <button type="button" class="file-remove-btn" data-url="${url}">&times;</button>
           </div>
         `).join('')}
       </div>
       <div class="file-upload-zone" data-upload="${field.name}" style="margin-top: var(--space-sm)">
-        <p class="text-caption">Add more photos...</p>
+        <p class="text-caption">${field.multiple ? 'Add more photos/videos...' : 'Tap to upload'}</p>
         <input type="file" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} />
       </div>
     </div>
@@ -161,18 +164,44 @@ export const renderEditProperty = async (container, id) => {
     };
   });
 
-  // Update IntakeForm-style file previews for new uploads
+  // Update file previews for new uploads with proper thumbnails
   container.querySelectorAll('.file-upload-zone').forEach(zone => {
     const input = zone.querySelector('input');
     const name = zone.dataset.upload;
-    input.onchange = () => {
-      // For now simple list of names for new ones
-      const list = document.createElement('div');
-      list.className = 'text-caption';
-      list.style.marginTop = '4px';
-      list.textContent = `${input.files.length} new files ready`;
-      zone.appendChild(list);
-    };
+    const previewGrid = container.querySelector(`[data-previews="${name}"]`);
+
+    zone.addEventListener('click', () => input.click());
+
+    input.addEventListener('change', () => {
+      if (!previewGrid) return;
+      // Remove previous "new file" items (keep existing ones with data-url remove buttons)
+      previewGrid.querySelectorAll('.file-preview-new').forEach(el => el.remove());
+
+      Array.from(input.files).forEach(file => {
+        const div = document.createElement('div');
+        div.className = 'file-preview-item file-preview-new';
+
+        if (file.type.startsWith('image/')) {
+          const img = document.createElement('img');
+          img.className = 'file-preview-thumb';
+          img.src = URL.createObjectURL(file);
+          div.appendChild(img);
+        } else if (file.type.startsWith('video/')) {
+          const vid = document.createElement('video');
+          vid.className = 'file-preview-thumb';
+          vid.src = URL.createObjectURL(file);
+          vid.muted = true;
+          vid.preload = 'metadata';
+          div.appendChild(vid);
+        } else {
+          const badge = document.createElement('div');
+          badge.className = 'badge';
+          badge.textContent = file.name;
+          div.appendChild(badge);
+        }
+        previewGrid.appendChild(div);
+      });
+    });
   });
 
       // ─── Submit (Update) ───

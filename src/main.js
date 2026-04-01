@@ -84,6 +84,57 @@ function renderTopBar() {
   `;
 }
 
+// ─── Attach Top Bar Event Listeners ───
+// Must be called after every router() since the DOM is re-rendered each time
+function attachTopBarListeners() {
+  const logoutBtn = document.getElementById('btn-logout');
+  if (logoutBtn) {
+    logoutBtn.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        await signOut(auth);
+        showToast('Signed out');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    };
+  }
+
+  const installBtn = document.getElementById('pwa-install-btn');
+  if (installBtn) {
+    installBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        installBtn.style.display = 'none';
+      }
+      deferredPrompt = null;
+    };
+  }
+
+  // Profile dropdown toggle (works on mobile tap and desktop click)
+  const profileTrigger = document.getElementById('user-profile-trigger');
+  const dropdown = document.getElementById('user-dropdown');
+  if (profileTrigger && dropdown) {
+    profileTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle('show');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', () => {
+      dropdown.classList.remove('show');
+    });
+
+    // Prevent clicks inside dropdown from closing it
+    dropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
+}
+
 // ─── Pending Approval Screen ───
 function renderPendingScreen(container) {
   container.innerHTML = `
@@ -247,6 +298,9 @@ VITE_FIREBASE_APP_ID=your_app_id</pre>
       </div>
     `;
   }
+
+  // Re-attach top bar listeners after every DOM render
+  attachTopBarListeners();
 };
 
 window.addEventListener('hashchange', router);
@@ -265,46 +319,6 @@ onAuthStateChanged(auth, (user) => {
     syncUserProfile(user).catch(err => console.error('Sync profile error:', err));
   }
   router();
-  
-  // Set up listeners after DOM updates
-  setTimeout(() => {
-    const logoutBtn = document.getElementById('btn-logout');
-    if (logoutBtn) {
-      logoutBtn.onclick = async () => {
-        try {
-          await signOut(auth);
-          showToast('Signed out');
-        } catch (err) {
-          showToast(err.message, 'error');
-        }
-      };
-    }
-
-    const installBtn = document.getElementById('pwa-install-btn');
-    if (installBtn) {
-      installBtn.onclick = async () => {
-        if (!deferredPrompt) return;
-        
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        
-        if (outcome === 'accepted') {
-          console.log('User accepted the A2HS prompt');
-          installBtn.style.display = 'none';
-        }
-        deferredPrompt = null;
-      };
-    }
-
-    // Profile dropdown toggle
-    const profileTrigger = document.getElementById('user-profile-trigger');
-    if (profileTrigger) {
-      profileTrigger.onclick = (e) => {
-        e.stopPropagation();
-        document.getElementById('user-dropdown')?.classList.toggle('show');
-      };
-    }
-  }, 150);
 });
 
 // Failsafe: If onAuthStateChanged hasn't fired after 1.5s, render the app anyway
