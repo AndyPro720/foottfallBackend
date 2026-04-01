@@ -1,25 +1,30 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: v1.0 milestone complete
-last_updated: "2026-03-29T14:41:30.787Z"
+milestone: v2.0
+milestone_name: PWA Stability & Advanced Property Intelligence
+status: Defining requirements
+last_updated: "2026-04-01T10:38:00.000Z"
 progress:
-  total_phases: 6
-  completed_phases: 4
-  total_plans: 16
-  completed_plans: 9
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 ## Current Position
 
-- **Milestone**: Inventory Application Backend
-- **Phase**: 6
-- **Task**: Verification & Polish
-- **Status**: Milestone Complete / Build Verified
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-01 — Milestone v2.0.0 started
 
 ## Next Steps
 
-1. /gsd-audit-milestone
-2. /gsd-complete-milestone
-3. /gsd-cleanup
+1. /gsd-plan-milestone-requirements
+2. /gsd-research-phase (if needed)
+
+## Accumulated Context
+
+- Existing v1.0 completion with Auth and offline queue.
+- Current internal version is v1.4.1.
+- Goal: Deepen data capture and fix PWA reliability.
