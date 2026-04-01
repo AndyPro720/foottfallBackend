@@ -100,20 +100,82 @@ export const renderPropertyDetail = async (container, id) => {
           </div>
           <div class="card-body detail-grid">
             ${fieldsHtml}
+            ${section.id === 'property-info' && item.latitude && item.longitude ? `
+              <div class="detail-item" style="grid-column: 1 / -1">
+                <span class="text-label" style="margin-bottom: var(--space-xs)">Pinned Location</span>
+                <div id="static-map" class="static-map-preview"></div>
+                <script>
+                  setTimeout(() => {
+                    const smap = L.map('static-map', { 
+                      zoomControl: false, 
+                      dragging: false, 
+                      touchZoom: false, 
+                      scrollWheelZoom: false,
+                      doubleClickZoom: false,
+                      boxZoom: false
+                    }).setView([${item.latitude}, ${item.longitude}], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(smap);
+                    L.marker([${item.latitude}, ${item.longitude}]).addTo(smap);
+                  }, 500);
+                </script>
+              </div>
+            ` : ''}
           </div>
+
         </div>
       `;
     }).join('');
 
+    // ─── Phase 9: Prepare Slider Media ───
+    const mediaOrder = ['buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan'];
+    const allMedia = [];
+    mediaOrder.forEach(key => {
+      const urls = item.images?.[key] || [];
+      urls.forEach(url => allMedia.push({ url, category: key }));
+    });
+
+    const isVideo = (url) => /\.(mp4|webm|mov|avi|mkv)/i.test(url);
+    const isPdf = (url) => /\.pdf/i.test(url);
+
+    // ─── Render Page ───
     container.innerHTML = `
+      <div class="slider-container animate-enter">
+        <div class="slider-wrapper" id="detail-slider">
+          ${allMedia.length > 0 
+            ? allMedia.map(m => `
+                <div class="slider-item" onclick="window.openLightbox('${m.url}')">
+                  ${isVideo(m.url)
+                    ? `<video src="${m.url}" muted preload="metadata" style="pointer-events:none"></video>`
+                    : isPdf(m.url)
+                      ? `<div style="height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg-raised); gap:var(--space-md)">
+                           <svg width="48" height="48" fill="none" stroke="var(--text-tertiary)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                           <span class="text-label">PDF Document</span>
+                           <a href="${m.url}" target="_blank" class="btn-secondary" style="width:auto; padding:8px 16px; min-height:0">Open PDF</a>
+                         </div>`
+                      : `<img src="${m.url}" loading="eager" />`
+                  }
+                </div>
+              `).join('')
+            : `<div class="slider-item" style="display:flex; align-items:center; justify-content:center; background:var(--bg-raised); color:var(--text-tertiary)">
+                 No Photos Available
+               </div>`
+          }
+        </div>
+        ${allMedia.length > 1 ? `
+          <div class="slider-dots" id="slider-dots">
+            ${allMedia.map((_, i) => `<div class="slider-dot ${i === 0 ? 'active' : ''}"></div>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+
       <div class="page-header animate-enter">
         <div style="display:flex; justify-content:space-between; align-items:flex-start">
           <div>
             <h1 class="text-display">${item.name}</h1>
             <p class="text-label">${item.location}</p>
           </div>
-          <div class="status-select-wrapper">
-            <select id="status-select" class="badge ${item.status === 'active' ? 'badge-success' : 'badge-neutral'}" style="text-transform: capitalize; border: 1px solid var(--border-default); cursor: pointer; appearance: none; padding-right: 24px;">
+          <div class="status-select-wrapper" style="position:relative">
+            <select id="status-select" class="badge ${item.status === 'active' ? 'badge-success' : 'badge-neutral'}" style="text-transform: capitalize; border: 1px solid var(--border-default); cursor: pointer; appearance: none; padding-right: 24px; background: var(--bg-input);">
               <option value="active" ${item.status === 'active' ? 'selected' : ''}>Active</option>
               <option value="pending" ${(item.status === 'pending' || !item.status) ? 'selected' : ''}>Pending</option>
               <option value="inactive" ${item.status === 'inactive' ? 'selected' : ''}>Inactive</option>
@@ -138,7 +200,18 @@ export const renderPropertyDetail = async (container, id) => {
       </div>
     `;
 
+    // ─── Slider pagination logic ───
+    const slider = document.getElementById('detail-slider');
+    const dots = document.querySelectorAll('.slider-dot');
+    if (slider && dots.length > 0) {
+      slider.onscroll = () => {
+        const index = Math.round(slider.scrollLeft / slider.offsetWidth);
+        dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+      };
+    }
+
     // ─── Lightbox logic ───
+
     window.openLightbox = (src) => {
       const overlay = document.createElement('div');
       overlay.className = 'lightbox-overlay active';
@@ -201,47 +274,7 @@ export const renderPropertyDetail = async (container, id) => {
 };
 
 function renderPhotoGallery(item) {
-  const photoCategories = [
-    { key: 'buildingFacade', label: 'Building Facade' },
-    { key: 'unitFacade', label: 'Unit Facade' },
-    { key: 'interior', label: 'Interior' },
-    { key: 'signage', label: 'Signage' },
-    { key: 'floorPlan', label: 'Floor Plan' }
-  ];
-
-  const categoriesHtml = photoCategories.map(cat => {
-    const urls = item.images?.[cat.key] || [];
-    if (urls.length === 0) return '';
-
-    const isVideo = (url) => /\.(mp4|webm|mov|avi|mkv)/i.test(url);
-
-    return `
-      <div style="margin-bottom: var(--space-lg)">
-        <p class="text-label" style="margin-bottom: var(--space-sm)">${cat.label}</p>
-        <div class="photo-scroll-row">
-          ${urls.map(url => `
-            <div class="photo-row-item" onclick="window.openLightbox('${url}')">
-              ${isVideo(url)
-                ? `<video src="${url}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
-                : `<img src="${url}" loading="lazy" />`
-              }
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  if (!categoriesHtml) return '';
-
-  return `
-    <div class="card animate-enter" style="margin-bottom: var(--space-md)">
-      <div class="card-header">
-        <h3 class="text-subheading" style="color: var(--accent-green)">Photos & Documents</h3>
-      </div>
-      <div class="card-body">
-        ${categoriesHtml}
-      </div>
-    </div>
-  `;
+  // Legacy function - hidden in Phase 9 as media moved to the top slider
+  return '';
 }
+

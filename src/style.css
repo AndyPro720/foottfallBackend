@@ -791,12 +791,106 @@ a { color: inherit; text-decoration: none; }
 
 /* ========== PHOTO GALLERY ========== */
 
+/* ========== PHOTO GALLERY & SLIDER (Phase 9) ========== */
+
 .photo-scroll-row {
   display: flex;
   gap: var(--space-sm);
   overflow-x: auto;
   padding-bottom: var(--space-sm);
   scrollbar-width: none;
+}
+
+.photo-scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
+.slider-container {
+  position: relative;
+  width: calc(100% + (var(--space-md) * 2));
+  margin-left: calc(var(--space-md) * -1);
+  margin-top: calc(var(--space-lg) * -1);
+  margin-bottom: var(--space-lg);
+  aspect-ratio: 4/3;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.slider-wrapper {
+  display: flex;
+  height: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.slider-wrapper::-webkit-scrollbar {
+  display: none;
+}
+
+.slider-item {
+  flex: 0 0 100%;
+  height: 100%;
+  scroll-snap-align: start;
+  position: relative;
+}
+
+.slider-item img, .slider-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.slider-dots {
+  position: absolute;
+  bottom: var(--space-md);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.slider-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+.slider-dot.active {
+  background: var(--accent);
+  transform: scale(1.2);
+}
+
+/* ========== MAP PICKER (Phase 9) ========== */
+
+#map-picker {
+  width: 100%;
+  height: 250px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  margin-top: var(--space-xs);
+  z-index: 1; /* Keep Leaflet below fixed top bar */
+}
+
+.static-map-preview {
+  width: 100%;
+  height: 200px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-input);
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.leaflet-container {
+  background: var(--bg-base) !important;
+  font-family: inherit;
 }
 
 .photo-scroll-row::-webkit-scrollbar {

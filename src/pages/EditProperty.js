@@ -5,11 +5,25 @@ import { SECTIONS } from '../config/propertyFields.js';
 // ─── Render Helpers (Reused from IntakeForm) ───
 
 function renderField(field, value) {
-  if (field.type === 'select') return renderSelect(field, value);
-  if (field.type === 'toggle') return renderToggle(field, value);
-  if (field.type === 'file') return renderFileUpload(field, value);
-  return renderTextField(field, value);
+  let html = '';
+  if (field.type === 'select') html = renderSelect(field, value);
+  else if (field.type === 'toggle') html = renderToggle(field, value);
+  else if (field.type === 'file') html = renderFileUpload(field, value);
+  else html = renderTextField(field, value);
+
+  if (field.name === 'location') {
+    html += `
+      <div id="map-picker-container" class="form-group animate-enter" style="--delay:200ms">
+        <p class="text-caption">Tap on the map to update the exact location pin</p>
+        <div id="map-picker"></div>
+        <input type="hidden" id="latitude" name="latitude" value="${item?.latitude || ''}" />
+        <input type="hidden" id="longitude" name="longitude" value="${item?.longitude || ''}" />
+      </div>
+    `;
+  }
+  return html;
 }
+
 
 function renderTextField(field, value = '') {
   return `
@@ -204,7 +218,55 @@ export const renderEditProperty = async (container, id) => {
     });
   });
 
-      // ─── Submit (Update) ───
+
+
+  // ─── Phase 9: Initialize Map for Editing ───
+  let map, marker;
+  setTimeout(() => {
+    const mapEl = document.getElementById('map-picker');
+    if (!mapEl) return;
+
+    const lat = Number(item.latitude) || 28.6139;
+    const lng = Number(item.longitude) || 77.2090;
+
+    map = L.map('map-picker', {
+      zoomControl: false,
+      dragging: !L.Browser.mobile,
+      tap: !L.Browser.mobile
+    }).setView([lat, lng], 16);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    function updateMarker(newLat, newLng) {
+      document.getElementById('latitude').value = newLat;
+      document.getElementById('longitude').value = newLng;
+      if (marker) {
+        marker.setLatLng([newLat, newLng]);
+      } else {
+        marker = L.marker([newLat, newLng], { draggable: true }).addTo(map);
+        marker.on('dragend', (e) => {
+          const pos = e.target.getLatLng();
+          updateMarker(pos.lat, pos.lng);
+        });
+      }
+    }
+
+    if (item.latitude && item.longitude) {
+      updateMarker(lat, lng);
+    }
+
+    map.on('click', (e) => {
+      updateMarker(e.latlng.lat, e.latlng.lng);
+    });
+
+    setTimeout(() => map.invalidateSize(), 500);
+  }, 100);
+
+  // ─── Submit (Update) ───
+
   document.getElementById('edit-form').onsubmit = async (e) => {
     e.preventDefault();
     const btn = document.getElementById('save-btn');
@@ -252,6 +314,15 @@ export const renderEditProperty = async (container, id) => {
           }
         });
       });
+
+      // Capture Map Coordinates
+      const lat = document.getElementById('latitude')?.value;
+      const lng = document.getElementById('longitude')?.value;
+      if (lat && lng) {
+        data.latitude = Number(lat);
+        data.longitude = Number(lng);
+      }
+
 
       // Handle new photo uploads with granular updates
       if (fileFields.length > 0) {

@@ -78,11 +78,25 @@ function renderFileUpload(field) {
 }
 
 function renderField(field) {
-  if (field.type === 'select') return renderSelect(field);
-  if (field.type === 'toggle') return renderToggle(field);
-  if (field.type === 'file') return renderFileUpload(field);
-  return renderTextField(field);
+  let html = '';
+  if (field.type === 'select') html = renderSelect(field);
+  else if (field.type === 'toggle') html = renderToggle(field);
+  else if (field.type === 'file') html = renderFileUpload(field);
+  else html = renderTextField(field);
+
+  if (field.name === 'location') {
+    html += `
+      <div id="map-picker-container" class="form-group animate-enter" style="--delay:200ms">
+        <p class="text-caption">Tap on the map to drop a pin for exact location</p>
+        <div id="map-picker"></div>
+        <input type="hidden" id="latitude" name="latitude" />
+        <input type="hidden" id="longitude" name="longitude" />
+      </div>
+    `;
+  }
+  return html;
 }
+
 
 // ─── Main Render ───
 
@@ -197,7 +211,63 @@ export const renderIntakeForm = (container) => {
     });
   });
 
+  // ─── Phase 9: Initialize Map ───
+  let map, marker;
+  setTimeout(() => {
+    const mapEl = document.getElementById('map-picker');
+    if (!mapEl) return;
+
+    // Use a default location (e.g. New Delhi) or user's GPS
+    const defaultPos = [28.6139, 77.2090];
+    map = L.map('map-picker', {
+      zoomControl: false,
+      dragging: !L.Browser.mobile,
+      tap: !L.Browser.mobile
+    }).setView(defaultPos, 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    // Try to get current GPS
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        const { latitude, longitude } = position.coords;
+        map.setView([latitude, longitude], 16);
+        updateMarker(latitude, longitude);
+      }, (err) => {
+        console.warn('Geolocation failed:', err);
+      }, { timeout: 5000 });
+    }
+
+    function updateMarker(lat, lng) {
+      const latInput = document.getElementById('latitude');
+      const lngInput = document.getElementById('longitude');
+      if (latInput) latInput.value = lat;
+      if (lngInput) lngInput.value = lng;
+
+      if (marker) {
+        marker.setLatLng([lat, lng]);
+      } else {
+        marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+        marker.on('dragend', (e) => {
+          const pos = e.target.getLatLng();
+          updateMarker(pos.lat, pos.lng);
+        });
+      }
+    }
+
+    map.on('click', (e) => {
+      updateMarker(e.latlng.lat, e.latlng.lng);
+    });
+
+    // Fix map size after animations
+    setTimeout(() => map.invalidateSize(), 500);
+  }, 100);
+
   // ─── Form submission ───
+
   document.getElementById('intake-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('submit-btn');
@@ -245,7 +315,16 @@ export const renderIntakeForm = (container) => {
         });
       });
 
+      // Capture Map Coordinates
+      const lat = document.getElementById('latitude')?.value;
+      const lng = document.getElementById('longitude')?.value;
+      if (lat && lng) {
+        data.latitude = Number(lat);
+        data.longitude = Number(lng);
+      }
+
       data.status = 'active';
+
       data.images = {}; // Prepare images object
 
       // 2. Create the initial document (this writes to Firestore local cache immediately)

@@ -1,5 +1,9 @@
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "./firebaseConfig.js";
+import { heicTo } from "heic-to";
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
 
 /**
  * Uploads a file (image, document) to Firebase Storage and returns the public download URL.
@@ -10,10 +14,15 @@ import { storage } from "./firebaseConfig.js";
  * @returns {Promise<string>} The public download URL.
  */
 export async function uploadFile(file, path, onProgress = null) {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(`File ${file.name} exceeds the 50MB size limit.`);
+  }
+
   return new Promise((resolve, reject) => {
     const storageRef = ref(storage, path);
     // Begin the upload task
     const uploadTask = uploadBytesResumable(storageRef, file);
+
 
     uploadTask.on(
       "state_changed",
@@ -72,9 +81,20 @@ export async function uploadMultipleFiles(files, basePath, onProgress = null) {
   const totalFiles = fileArray.length;
   const urls = [];
 
-  const uploadPromises = fileArray.map((file, index) => {
+  const uploadPromises = fileArray.map(async (file, index) => {
+    // ─── Phase 9: HEIC Conversion ───
+    if (file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic') {
+      try {
+        const jpegBlob = await heicTo({ blob: file, type: "image/jpeg", quality: 0.8 });
+        file = new File([jpegBlob], file.name.replace(/\.heic$/i, '.jpg'), { type: "image/jpeg" });
+      } catch (err) {
+        console.error("HEIC conversion failed, attempting raw upload:", err);
+      }
+    }
+
     const filePath = `${basePath}/${Date.now()}_${index}_${file.name}`;
     return uploadFile(file, filePath, (p) => {
+
       // Aggregate progress calculation: 
       // (sum of individual file progress / total files)
       // This is a simplified approximation as files may have different sizes.
