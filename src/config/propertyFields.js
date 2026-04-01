@@ -15,6 +15,7 @@ export const SECTIONS = [
       { name: 'buildingType', label: 'Building Type', type: 'select', options: ['Mall', 'Standalone', 'High Street'], required: false },
       { name: 'size', label: 'Carpet Area (sq ft)', type: 'number', required: false, placeholder: 'Carpet area' },
       { name: 'floor', label: 'Which Floor', type: 'text', placeholder: 'e.g., Ground, 1st, 2nd' },
+      { name: 'entryToBuilding', label: 'Entry to Building Photo', type: 'file', accept: 'image/*,video/*' },
       { name: 'location', label: 'Exact Location / Address', type: 'text', required: false, placeholder: 'Full address' },
       { name: 'tradeArea', label: 'Trade Area', type: 'text', placeholder: 'e.g., MG Road, Connaught Place' },
       { name: 'suitableFor', label: 'Suitable For', type: 'text', placeholder: 'e.g., F&B, Retail, Services' },
@@ -52,12 +53,12 @@ export const SECTIONS = [
     collapsed: true,
     fields: [
       { name: 'parking', label: 'Parking Space', type: 'toggle', hasCount: true, countLabel: 'Number of spots', hasPhoto: true },
-      { name: 'outsideVisibility', label: 'Outside Visibility', type: 'toggle' },
+      { name: 'outsideSpace', label: 'Outside Space', type: 'toggle', hasPhoto: true },
       { name: 'serviceEntry', label: 'Service Entry', type: 'toggle', hasPhoto: true },
       { name: 'liftAccess', label: 'Lift Access', type: 'toggle', hasPhoto: true },
       { name: 'bohSpace', label: 'BOH Space', type: 'toggle', hasPhoto: true },
       { name: 'fireExit', label: 'Fire Exit', type: 'toggle' },
-      { name: 'ocFile', label: 'OC File Available', type: 'toggle' },
+      { name: 'ocFile', label: 'OC File Upload', type: 'file', accept: 'image/*,video/*,.pdf' },
     ]
   },
   {
