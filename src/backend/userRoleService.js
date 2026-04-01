@@ -9,24 +9,51 @@ export async function syncUserProfile(user) {
   if (!user) return null;
 
   const userDocRef = doc(db, 'users', user.uid);
-  const userSnap = await getDoc(userDocRef);
 
-  if (!userSnap.exists()) {
-    const userData = {
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName || '',
-      role: 'agent', // Default role
-      status: 'pending', // All new users start as pending
-      createdAt: serverTimestamp(),
-      lastLogin: serverTimestamp()
-    };
-    await setDoc(userDocRef, userData);
-    return userData;
-  } else {
-    // Update last login (non-blocking)
-    setDoc(userDocRef, { lastLogin: serverTimestamp() }, { merge: true });
-    return userSnap.data();
+  // Background non-blocking update for lastLogin
+  const updateLastLogin = async () => {
+    try {
+      await setDoc(userDocRef, { lastLogin: serverTimestamp() }, { merge: true });
+    } catch (e) {
+      // Ignore offline failures for this background task
+    }
+  };
+
+  // Try instant cache retrieval first
+  try {
+    const cacheSnap = await getDocFromCache(userDocRef);
+    if (cacheSnap.exists()) {
+      updateLastLogin();
+      return cacheSnap.data();
+    }
+  } catch (e) {
+    // Cache miss or error, fallback to server silently
+  }
+
+  // Fallback to server if cache is empty
+  try {
+    const userSnap = await getDoc(userDocRef);
+    
+    if (!userSnap.exists()) {
+      const userData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName || '',
+        role: 'agent', // Default role
+        status: 'pending', // All new users start as pending
+        createdAt: serverTimestamp(),
+        lastLogin: serverTimestamp()
+      };
+      await setDoc(userDocRef, userData);
+      return userData;
+    } else {
+      updateLastLogin();
+      return userSnap.data();
+    }
+  } catch (e) {
+    console.warn("Could not sync user profile from server.", e);
+    // Safe fallback so the app doesn't crash or sign user out when offline
+    return { uid: user.uid, email: user.email, displayName: user.displayName, role: 'agent', status: 'pending' };
   }
 }
 
