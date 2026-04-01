@@ -19,9 +19,9 @@
 
 ### Enhanced Data Capture
 
-- [ ] **DATA-01**: User can set Property Status as Occupied, Available, or Near Completion
-- [ ] **DATA-02**: If Near Completion, user can enter estimated completion time
-- [ ] **DATA-03**: If Near Completion, user can enter Part OC (number) and Complete OC (number) values
+- [ ] **DATA-01**: User can set Property Status as Occupied, Available, or Under Construction
+- [ ] **DATA-02**: If Under Construction, user can enter estimated completion time
+- [ ] **DATA-03**: If Under Construction, user can enter Part OC (number) and Complete OC (number) values
 - [ ] **DATA-04**: If OC File Available = Yes, user can upload the OC document
 - [ ] **DATA-05**: User can toggle Mezzanine (yes/no); if yes, enter mezzanine size (sqft)
 - [ ] **DATA-06**: Clear Height shows 3 sub-fields when mezzanine=yes (Total Height, Under Mezzanine, Above Mezzanine); shows only Total Height when mezzanine=no
