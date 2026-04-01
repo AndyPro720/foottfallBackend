@@ -48,7 +48,7 @@ export const renderPropertyDetail = async (container, id) => {
     const sectionsHtml = SECTIONS.map(section => {
       if (section.id === 'photos') return renderPhotoGallery(item);
 
-      const fieldsHtml = section.fields.map(field => {
+      let fieldsHtml = section.fields.map(field => {
         const value = item[field.name];
         
         if (field.type === 'toggle') {
