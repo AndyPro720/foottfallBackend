@@ -8,7 +8,12 @@ export const SECTIONS = [
     collapsed: false,
     fields: [
       { name: 'name', label: 'Property Name', type: 'text', required: true, placeholder: 'e.g., Phoenix Mall Unit 204' },
+      { name: 'propertyStatus', label: 'Property Status', type: 'select', options: ['Occupied', 'Available', 'Under Construction'], required: false },
+      { name: 'completionTime', label: 'Completion Time (Months)', type: 'number', placeholder: 'Months to completion', conditionalOn: { field: 'propertyStatus', value: 'Under Construction' } },
+      { name: 'partOC', label: 'Part OC', type: 'number', placeholder: 'Numeric value', conditionalOn: { field: 'propertyStatus', value: 'Under Construction' } },
+      { name: 'completeOC', label: 'Complete OC', type: 'number', placeholder: 'Numeric value', conditionalOn: { field: 'propertyStatus', value: 'Under Construction' } },
       { name: 'buildingType', label: 'Building Type', type: 'select', options: ['Mall', 'Standalone', 'High Street'], required: false },
+      { name: 'size', label: 'Carpet Area (sq ft)', type: 'number', required: false, placeholder: 'Carpet area' },
       { name: 'floor', label: 'Which Floor', type: 'text', placeholder: 'e.g., Ground, 1st, 2nd' },
       { name: 'location', label: 'Exact Location / Address', type: 'text', required: false, placeholder: 'Full address' },
       { name: 'tradeArea', label: 'Trade Area', type: 'text', placeholder: 'e.g., MG Road, Connaught Place' },
@@ -30,7 +35,6 @@ export const SECTIONS = [
     title: 'Unit Specifications',
     collapsed: true,
     fields: [
-      { name: 'size', label: 'Size (sq ft)', type: 'number', required: false, placeholder: 'Carpet area' },
       { name: 'price', label: 'Price per Sq Ft (₹)', type: 'number', required: false, placeholder: '₹/sqft' },
       { name: 'cam', label: 'CAM (₹/sqft)', type: 'number', placeholder: 'Common Area Maintenance' },
       { name: 'clearHeight', label: 'Clear Height (ft)', type: 'number', placeholder: 'Floor to ceiling' },

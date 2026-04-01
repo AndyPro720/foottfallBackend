@@ -6,8 +6,11 @@ import { showToast } from '../utils/ui.js';
 // ─── Render Helpers ───
 
 function renderTextField(field) {
+  const conditionalAttr = field.conditionalOn 
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"` 
+    : '';
   return `
-    <div class="form-group">
+    <div class="form-group"${conditionalAttr}>
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
       <input class="form-input" type="${field.type}" id="${field.name}" name="${field.name}" 
              placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''} />
@@ -16,8 +19,11 @@ function renderTextField(field) {
 }
 
 function renderSelect(field) {
+  const conditionalAttr = field.conditionalOn 
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"` 
+    : '';
   return `
-    <div class="form-group">
+    <div class="form-group"${conditionalAttr}>
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
       <select class="form-input form-select" id="${field.name}" name="${field.name}" ${field.required ? 'required' : ''}>
         <option value="" disabled selected>Select...</option>
@@ -108,6 +114,18 @@ export const renderIntakeForm = (container) => {
   container.querySelectorAll('.form-section-header').forEach(header => {
     header.addEventListener('click', () => {
       header.parentElement.classList.toggle('collapsed');
+    });
+  });
+
+  // ─── Generic conditional select listeners ───
+  container.querySelectorAll('select').forEach(selectEl => {
+    selectEl.addEventListener('change', (e) => {
+      const fieldName = e.target.name;
+      const value = e.target.value;
+      const conditionals = container.querySelectorAll(`[data-conditional-on="${fieldName}"]`);
+      conditionals.forEach(el => {
+        el.style.display = (el.dataset.conditionalValue === value) ? 'block' : 'none';
+      });
     });
   });
 
