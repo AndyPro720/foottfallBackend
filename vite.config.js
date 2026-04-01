@@ -8,11 +8,32 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version)
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (
+            id.includes('node_modules/firebase') ||
+            id.includes('node_modules/@firebase')
+          ) {
+            return 'firebase';
+          }
+
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        }
+      }
+    }
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: {
         enabled: true
+      },
+      workbox: {
+        maximumFileSizeToCacheInBytes: 5000000
       },
       manifest: {
         name: 'Footfall Inventory',
