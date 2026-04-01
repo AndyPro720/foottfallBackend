@@ -6,7 +6,7 @@ slug: 08-research
 # Research: Enhanced Data Capture
 
 ## Context
-The goal is to significantly expand the `IntakeForm.js` and `PropertyDetail.js` modules to support conditional fields (like "Near Completion" status revealing timestamps, "Mezzanine" revealing 3 clear height sub-fields) and new logic calculations (Effective Rent).
+The goal is to significantly expand the `IntakeForm.js` and `PropertyDetail.js` modules to support conditional fields (like "Under Construction" status revealing timestamps, "Mezzanine" revealing 3 clear height sub-fields) and new logic calculations (Effective Rent).
 
 ## Current Codebase Architecture
 1. **`propertyFields.js` configuration**:
@@ -22,7 +22,7 @@ The goal is to significantly expand the `IntakeForm.js` and `PropertyDetail.js` 
    - Rent is auto-calculated as `Price per sqft × Size (sqft)`. The existing template formats `price` directly; we should format a derived `rent` value when both fields are present.
 
 ## Approach
-- **Property Status**: Add `status` field manually to `propertyFields.js`'s Property Info section as a `select` (options: Occupied, Available, Near Completion) so it's captured at intake.
+- **Property Status**: Add `status` field manually to `propertyFields.js`'s Property Info section as a `select` (options: Occupied, Available, Under Construction) so it's captured at intake.
 - **Conditional Rendering Upgrade**: In `IntakeForm.js`, expand the toggle logic to evaluate generic `data-condition="fieldname=value"` selectors if needed, or explicitly link specific IDs for Mezzanine and Status options.
 - **Photos & Docs**: Add `entryToBuilding` photo field. Expand `outsideSpace` to use `hasPhoto`. Add `ocFile` as `type: 'file'` instead of toggle.
 - **Calculations**: Implement Rent calculation purely in `PropertyDetail.js` as a read-side computed variable to keep Firestore clean (avoids recalculation syncing on price updates).
