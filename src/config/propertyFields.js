@@ -36,8 +36,12 @@ export const SECTIONS = [
     collapsed: true,
     fields: [
       { name: 'price', label: 'Price per Sq Ft (₹)', type: 'number', required: false, placeholder: '₹/sqft' },
+      { name: 'mezzanine', label: 'Mezzanine Available', type: 'toggle' },
+      { name: 'mezzanineSize', label: 'Mezzanine Size (sq ft)', type: 'number', placeholder: 'Size in sqft', conditionalOn: { field: 'mezzanine', value: 'yes' } },
+      { name: 'clearHeight', label: 'Total Clear Height (ft)', type: 'number', placeholder: 'Floor to ceiling' },
+      { name: 'clearHeightUnderMezz', label: 'Clear Height Under Mezzanine (ft)', type: 'number', placeholder: 'Floor to Mezzanine', conditionalOn: { field: 'mezzanine', value: 'yes' } },
+      { name: 'clearHeightAboveMezz', label: 'Clear Height Above Mezzanine (ft)', type: 'number', placeholder: 'Mezzanine to ceiling', conditionalOn: { field: 'mezzanine', value: 'yes' } },
       { name: 'cam', label: 'CAM (₹/sqft)', type: 'number', placeholder: 'Common Area Maintenance' },
-      { name: 'clearHeight', label: 'Clear Height (ft)', type: 'number', placeholder: 'Floor to ceiling' },
       { name: 'connectedLoad', label: 'Connected Load (KW)', type: 'number', placeholder: 'Electrical load' },
       { name: 'buildingAge', label: 'Age of Building (years)', type: 'number', placeholder: 'Approximate age' },
     ]

@@ -75,10 +75,21 @@ export const renderPropertyDetail = async (container, id) => {
         return `
           <div class="detail-item">
             <span class="text-label">${field.label}</span>
-            <span class="text-body">${field.type === 'number' && field.name === 'price' ? '₹' + Number(value).toLocaleString('en-IN') : value}${field.name === 'size' ? ' sqft' : ''}</span>
+            <span class="text-body">${field.type === 'number' && field.name === 'price' ? '₹' + Number(value).toLocaleString('en-IN') : value}${field.name === 'size' ? ' sqft' : ''}${field.name === 'mezzanineSize' ? ' sqft' : ''}</span>
           </div>
         `;
       }).join('');
+
+      // Auto-calculate Effective Rent
+      if (section.id === 'specs' && item.size && item.price) {
+        const rent = Number(item.size) * Number(item.price);
+        fieldsHtml = `
+          <div class="detail-item" style="background: var(--surface-hover); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm);">
+            <span class="text-label" style="color: var(--accent-green); font-weight: 600;">Effective Rent</span>
+            <span class="text-body" style="font-weight: 700;">₹${rent.toLocaleString('en-IN')} / month</span>
+          </div>
+        ` + fieldsHtml;
+      }
 
       if (!fieldsHtml) return '';
 

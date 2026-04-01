@@ -34,8 +34,11 @@ function renderSelect(field) {
 }
 
 function renderToggle(field) {
+  const conditionalAttr = field.conditionalOn 
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"` 
+    : '';
   return `
-    <div class="form-group">
+    <div class="form-group"${conditionalAttr}>
       <label class="form-label">${field.label}</label>
       <div class="toggle-group" data-toggle="${field.name}">
         <button type="button" class="toggle-option" data-value="no">No</button>
@@ -145,10 +148,16 @@ export const renderIntakeForm = (container) => {
       btn.addEventListener('click', () => {
         buttons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        // Show/hide conditional fields
+        // Legacy generic condition handling
         const conditionals = container.querySelectorAll(`[data-condition="${fieldName}"]`);
         conditionals.forEach(el => {
           el.style.display = btn.dataset.value === 'yes' ? 'block' : 'none';
+        });
+        
+        // Strict mapping condition handling
+        const strictConditionals = container.querySelectorAll(`[data-conditional-on="${fieldName}"]`);
+        strictConditionals.forEach(el => {
+          el.style.display = (el.dataset.conditionalValue === btn.dataset.value) ? 'block' : 'none';
         });
       });
     });
