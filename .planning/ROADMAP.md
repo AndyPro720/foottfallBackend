@@ -67,13 +67,14 @@
 **Status**: 🔲 Not Started
 **Objective**: Build a desktop-optimized dashboard page with responsive grid layout, sidebar/top-bar multi-field filtering, and keyword search across all text fields.
 
-**Requirements**: DASH-01, DASH-02, DASH-03
+**Requirements**: DASH-01, DASH-02, DASH-03, DASH-04
 
 **Success Criteria**:
 1. A dedicated `#dashboard` route renders a responsive grid layout that adapts from mobile (single column) to desktop (multi-column cards)
 2. Desktop view shows a sidebar or top-bar filter panel supporting multi-field filtering (type, status, location, price range, size range)
 3. Keyword search matches across name, location, trade area, and suitableFor fields with highlighting of matched terms
-4. Dashboard loads all properties efficiently and maintains scroll position during filtering
+4. User can toggle between card grid view and table/list view; preference persists across sessions
+5. Dashboard loads all properties efficiently and maintains scroll position during filtering
 
 ---
 
@@ -110,3 +111,4 @@
 | DASH-01 | 11 | Desktop grid layout |
 | DASH-02 | 11 | Multi-field filter panel |
 | DASH-03 | 11 | Keyword search |
+| DASH-04 | 11 | View mode toggle (cards/table) |

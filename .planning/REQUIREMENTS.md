@@ -50,6 +50,7 @@
 - [ ] **DASH-01**: Desktop-optimized dashboard page with responsive grid layout for property cards
 - [ ] **DASH-02**: Sidebar or top-bar filter panel with multi-field filtering (type, status, location, price range, size range)
 - [ ] **DASH-03**: Keyword search across all text fields (name, location, trade area, suitableFor)
+- [ ] **DASH-04**: User can toggle between multiple view modes (card grid, table/list view) on the desktop dashboard
 
 ---
 
