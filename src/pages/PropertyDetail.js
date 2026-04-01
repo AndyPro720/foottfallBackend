@@ -1,6 +1,30 @@
 import { getInventoryItemById, updateInventoryItem, deleteInventoryItem } from '../backend/inventoryService.js';
 import { SECTIONS } from '../config/propertyFields.js';
 
+const VIDEO_FILE_RE = /\.(mp4|webm|mov|avi|mkv)(\?|$)/i;
+const PDF_FILE_RE = /\.pdf(\?|$)/i;
+
+function isVideoUrl(url) {
+  return VIDEO_FILE_RE.test(String(url || ''));
+}
+
+function isPdfUrl(url) {
+  return PDF_FILE_RE.test(String(url || ''));
+}
+
+function getDisplayLocation(item) {
+  const manualLocation = String(item.location || '').trim();
+  if (manualLocation) return manualLocation;
+
+  const latitude = Number(item.latitude);
+  const longitude = Number(item.longitude);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    return `Pinned: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+  }
+
+  return '';
+}
+
 export const renderPropertyDetail = async (container, id) => {
   // Show skeleton while loading
   container.innerHTML = `
@@ -121,8 +145,6 @@ export const renderPropertyDetail = async (container, id) => {
       urls.forEach(url => allMedia.push({ url, category: key }));
     });
 
-    const isVideo = (url) => /\.(mp4|webm|mov|avi|mkv)/i.test(url);
-    const isPdf = (url) => /\.pdf/i.test(url);
 
     // ─── Render Page ───
     container.innerHTML = `
@@ -131,13 +153,13 @@ export const renderPropertyDetail = async (container, id) => {
           ${allMedia.length > 0 
             ? allMedia.map(m => `
                 <div class="slider-item" onclick="window.openLightbox('${m.url}')">
-                  ${isVideo(m.url)
+                  ${isVideoUrl(m.url)
                     ? `<video src="${m.url}" muted preload="metadata" style="pointer-events:none"></video>`
-                    : isPdf(m.url)
+                    : isPdfUrl(m.url)
                       ? `<div style="height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg-raised); gap:var(--space-md)">
                            <svg width="48" height="48" fill="none" stroke="var(--text-tertiary)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                            <span class="text-label">PDF Document</span>
-                           <a href="${m.url}" target="_blank" class="btn-secondary" style="width:auto; padding:8px 16px; min-height:0">Open PDF</a>
+                           <span class="text-caption">Tap to open PDF</span>
                          </div>`
                       : `<img src="${m.url}" loading="eager" />`
                   }
@@ -166,7 +188,7 @@ export const renderPropertyDetail = async (container, id) => {
         <div style="display:flex; justify-content:space-between; align-items:flex-start">
           <div>
             <h1 class="text-display">${item.name}</h1>
-            <p class="text-label">${item.location}</p>
+            <p class="text-label">${getDisplayLocation(item) || 'No location'}</p>
           </div>
           <div class="status-select-wrapper" style="position:relative">
             <select id="status-select" class="badge ${item.status === 'active' ? 'badge-success' : 'badge-neutral'}" style="text-transform: capitalize; border: 1px solid var(--border-default); cursor: pointer; appearance: none; padding-right: 24px; background: var(--bg-input);">
@@ -233,9 +255,14 @@ export const renderPropertyDetail = async (container, id) => {
     // ─── Lightbox logic ───
 
     window.openLightbox = (src) => {
+      if (isPdfUrl(src)) {
+        window.open(src, '_blank', 'noopener');
+        return;
+      }
+
       const overlay = document.createElement('div');
       overlay.className = 'lightbox-overlay active';
-      const isVideo = /\.(mp4|webm|mov|avi|mkv)/i.test(src);
+      const isVideo = isVideoUrl(src);
       overlay.innerHTML = `
         ${isVideo 
           ? `<video src="${src}" class="lightbox-img" controls autoplay style="max-width:90%;max-height:90%"></video>`
@@ -306,18 +333,15 @@ function renderPhotoGallery(item) {
     const urls = item.images?.[cat.key] || [];
     if (urls.length === 0) return '';
 
-    const isVideo = (url) => /\.(mp4|webm|mov|avi|mkv)/i.test(url);
-    const isPdf = (url) => /\.pdf/i.test(url);
-
     return `
       <div style="margin-bottom: var(--space-md)">
         <p class="text-label" style="margin-bottom: var(--space-xs); font-weight: 600; color: var(--text-secondary)">${cat.label}</p>
         <div class="photo-scroll-row">
           ${urls.map(url => `
             <div class="photo-row-item" onclick="window.openLightbox('${url}')">
-              ${isVideo(url)
+              ${isVideoUrl(url)
                 ? `<video src="${url}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
-                : isPdf(url)
+                : isPdfUrl(url)
                   ? `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--bg-raised)"><svg width="24" height="24" fill="none" stroke="var(--text-tertiary)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div>`
                   : `<img src="${url}" loading="lazy" />`
               }
@@ -341,5 +365,3 @@ function renderPhotoGallery(item) {
     </div>
   `;
 }
-
-

@@ -267,6 +267,13 @@ a { color: inherit; text-decoration: none; }
   gap: 2px;
 }
 
+.card-location-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
 .card-error {
   border-color: var(--destructive);
   background: var(--destructive-dim);
@@ -504,6 +511,22 @@ a { color: inherit; text-decoration: none; }
 .file-upload-zone:hover {
   border: 2px solid var(--border-hover);
   background: var(--bg-overlay);
+}
+
+.capture-video-btn {
+  margin-top: var(--space-sm);
+  padding: 8px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.capture-video-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
 }
 
 .file-upload-zone input[type="file"] {

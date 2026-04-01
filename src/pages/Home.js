@@ -1,6 +1,34 @@
 import { getInventoryItems } from '../backend/inventoryService.js';
 import { getAllUsers } from '../backend/userRoleService.js';
 
+function getDisplayLocation(item) {
+  const manualLocation = String(item.location || '').trim();
+  if (manualLocation) return manualLocation;
+
+  const latitude = Number(item.latitude);
+  const longitude = Number(item.longitude);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    return `Pinned: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+  }
+
+  return '';
+}
+
+function getMapLink(item) {
+  const latitude = Number(item.latitude);
+  const longitude = Number(item.longitude);
+  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    return `https://www.google.com/maps?q=${latitude},${longitude}`;
+  }
+
+  const locationText = String(item.location || '').trim();
+  if (locationText) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationText)}`;
+  }
+
+  return '';
+}
+
 export const renderHome = async (container) => {
   // Show skeleton while loading
   container.innerHTML = `
@@ -73,6 +101,9 @@ export const renderHome = async (container) => {
         });
       }
 
+      const displayLocation = getDisplayLocation(item);
+      const mapLink = getMapLink(item);
+
       return `
         <a href="#property/${item.id}" class="card card-interactive animate-enter" style="--delay:${(i + 1) * 60}ms; text-decoration: none; display: block; color: inherit;">
           <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
@@ -94,7 +125,10 @@ export const renderHome = async (container) => {
                   ${item.syncPending ? `<span class="badge badge-sync">Sync Pending</span>` : ''}
                 </div>
               </div>
-              <p class="text-label" style="margin-top:var(--space-xs)">${item.location || 'No location'}</p>
+              ${displayLocation
+                ? `<p class="text-label ${mapLink ? 'card-location-link' : ''}" ${mapLink ? `data-map-link="${mapLink}"` : ''} style="margin-top:var(--space-xs)">${displayLocation}</p>`
+                : '<p class="text-label" style="margin-top:var(--space-xs)">No location</p>'
+              }
             </div>
           </div>
           <div class="card-footer" style="display:flex;align-items:center;gap:var(--space-sm)">
@@ -130,6 +164,16 @@ export const renderHome = async (container) => {
     `;
 
     // ─── Export Trigger Handler ───
+    container.querySelectorAll('.card-location-link').forEach((locationEl) => {
+      locationEl.addEventListener('click', (event) => {
+        const mapLink = locationEl.dataset.mapLink;
+        if (!mapLink) return;
+        event.preventDefault();
+        event.stopPropagation();
+        window.open(mapLink, '_blank', 'noopener');
+      });
+    });
+
     document.getElementById('export-trigger').onclick = async () => {
       const btn = document.getElementById('export-trigger');
       const { showToast } = await import('../utils/ui.js');

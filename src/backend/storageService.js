@@ -83,10 +83,14 @@ export async function uploadMultipleFiles(files, basePath, onProgress = null) {
 
   const uploadPromises = fileArray.map(async (file, index) => {
     // ─── Phase 9: HEIC Conversion ───
-    if (file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic') {
+    const fileType = String(file.type || '').toLowerCase();
+    const isHeic = /\.hei(c|f)$/i.test(file.name || '') || fileType === 'image/heic' || fileType === 'image/heif';
+    if (isHeic) {
       try {
-        const jpegBlob = await heicTo({ blob: file, type: "image/jpeg", quality: 0.8 });
-        file = new File([jpegBlob], file.name.replace(/\.heic$/i, '.jpg'), { type: "image/jpeg" });
+        const converted = await heicTo({ blob: file, type: "image/jpeg", quality: 0.8 });
+        const jpegBlob = converted instanceof Blob ? converted : new Blob([converted], { type: "image/jpeg" });
+        const outputName = (file.name || `upload_${Date.now()}`).replace(/\.hei(c|f)$/i, '.jpg');
+        file = new File([jpegBlob], outputName, { type: "image/jpeg" });
       } catch (err) {
         console.error("HEIC conversion failed, attempting raw upload:", err);
       }

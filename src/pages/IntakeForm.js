@@ -1,7 +1,36 @@
 import { createInventoryItem, updateInventoryItem } from '../backend/inventoryService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
 import { SECTIONS } from '../config/propertyFields.js';
+import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
+
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+
+function isLikelyHeicFile(file) {
+  const fileType = String(file.type || '').toLowerCase();
+  return /\.hei(c|f)$/i.test(file.name || '') || fileType === 'image/heic' || fileType === 'image/heif';
+}
+
+async function convertHeicToJpegBlob(file) {
+  const converted = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.7 });
+  if (converted instanceof Blob) return converted;
+  return new Blob([converted], { type: 'image/jpeg' });
+}
+
+function mergeFilesIntoInput(input, incomingFiles) {
+  if (!incomingFiles || incomingFiles.length === 0) return true;
+  if (typeof DataTransfer === 'undefined') return false;
+
+  const dt = new DataTransfer();
+  if (input.multiple) {
+    Array.from(input.files || []).forEach((file) => dt.items.add(file));
+    incomingFiles.forEach((file) => dt.items.add(file));
+  } else {
+    dt.items.add(incomingFiles[incomingFiles.length - 1]);
+  }
+  input.files = dt.files;
+  return true;
+}
 
 // ─── Render Helpers ───
 
@@ -54,7 +83,9 @@ function renderToggle(field) {
           <div class="file-upload-zone" data-upload="${field.name}Photo">
             <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <p class="text-caption">Tap to add photo/video</p>
-            <input type="file" accept="image/*,video/*" />
+            <input type="file" data-main-upload="true" accept="image/*,video/*" />
+            <input type="file" data-video-capture="true" accept="video/*" capture="environment" />
+            <button type="button" class="capture-video-btn">Record Video</button>
           </div>
           <div class="file-preview-grid" data-previews="${field.name}Photo"></div>
         </div>
@@ -70,7 +101,9 @@ function renderFileUpload(field) {
       <div class="file-upload-zone" data-upload="${field.name}">
         <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
         <p class="text-caption">${field.multiple ? 'Tap to add photos/videos' : 'Tap to upload'}</p>
-        <input type="file" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} />
+        <input type="file" data-main-upload="true" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} />
+        <input type="file" data-video-capture="true" accept="video/*" capture="environment" />
+        <button type="button" class="capture-video-btn">Record Video</button>
       </div>
       <div class="file-preview-grid" data-previews="${field.name}"></div>
     </div>
@@ -189,21 +222,47 @@ export const renderIntakeForm = (container) => {
 
   // ─── File upload zones ───
   container.querySelectorAll('.file-upload-zone').forEach(zone => {
-    const input = zone.querySelector('input[type="file"]');
+    const input = zone.querySelector('input[data-main-upload="true"]') || zone.querySelector('input[type="file"]');
+    const videoCaptureInput = zone.querySelector('input[data-video-capture="true"]');
+    const captureButton = zone.querySelector('.capture-video-btn');
     const uploadName = zone.dataset.upload;
     const previewGrid = container.querySelector(`[data-previews="${uploadName}"]`);
 
-    zone.addEventListener('click', () => input.click());
+    zone.addEventListener('click', (event) => {
+      if (event.target.closest('.capture-video-btn')) return;
+      input.click();
+    });
+
+    if (captureButton && videoCaptureInput) {
+      captureButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        videoCaptureInput.click();
+      });
+
+      videoCaptureInput.addEventListener('change', () => {
+        const capturedFiles = Array.from(videoCaptureInput.files || []);
+        if (capturedFiles.length === 0) return;
+
+        const merged = mergeFilesIntoInput(input, capturedFiles);
+        if (!merged) {
+          showToast('Video captured. Please reselect it from files if it does not appear.', 'info');
+        }
+
+        videoCaptureInput.value = '';
+        input.dispatchEvent(new Event('change'));
+      });
+    }
 
     input.addEventListener('change', async () => {
       if (!previewGrid) return;
       previewGrid.innerHTML = '';
 
-      const maxSizeBytes = 50 * 1024 * 1024; // 50MB
       let hasOversized = false;
+      let hasHeicPreviewFailure = false;
 
       for (const file of Array.from(input.files)) {
-        if (file.size > maxSizeBytes) {
+        if (file.size > MAX_FILE_SIZE_BYTES) {
           hasOversized = true;
           continue;
         }
@@ -214,15 +273,21 @@ export const renderIntakeForm = (container) => {
 
         try {
           let displayUrl = URL.createObjectURL(file);
-          let isVideo = file.type.startsWith('video/');
-          let isHeic = file.name.toLowerCase().endsWith('.heic') || file.type === 'image/heic';
+          const isVideo = file.type.startsWith('video/');
+          const isHeic = isLikelyHeicFile(file);
 
           if (isHeic) {
             devDiv.innerHTML = '<div class="converting-badge">Converting...</div>';
-            const { default: heicTo } = await import('https://cdn.jsdelivr.net/npm/heic-to@1.4.2/+esm');
-            const jpegBlob = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.7 });
-            displayUrl = URL.createObjectURL(jpegBlob);
-            devDiv.innerHTML = ''; // Clear badge
+            try {
+              const jpegBlob = await convertHeicToJpegBlob(file);
+              displayUrl = URL.createObjectURL(jpegBlob);
+              devDiv.innerHTML = '';
+            } catch (conversionError) {
+              console.error('HEIC preview conversion failed:', conversionError);
+              hasHeicPreviewFailure = true;
+              devDiv.innerHTML = '<div class="badge">HEIC selected</div>';
+              continue;
+            }
           }
 
           if (isVideo) {
@@ -249,6 +314,10 @@ export const renderIntakeForm = (container) => {
 
       if (hasOversized) {
         showToast('Some files skipped (Max 50MB limit)', 'error');
+      }
+
+      if (hasHeicPreviewFailure) {
+        showToast('Some HEIC files could not be previewed, but they can still upload.', 'warning');
       }
     });
   });
@@ -362,13 +431,13 @@ export const renderIntakeForm = (container) => {
 
             // Facility photos (conditional)
             if (field.hasPhoto && isYes) {
-              const fileInput = container.querySelector(`[data-upload="${field.name}Photo"] input`);
+              const fileInput = container.querySelector(`[data-upload="${field.name}Photo"] input[data-main-upload="true"]`);
               if (fileInput?.files?.length > 0) {
                 fileFields.push({ name: field.name, files: fileInput.files, isFacility: true });
               }
             }
           } else if (field.type === 'file') {
-            const fileInput = container.querySelector(`[data-upload="${field.name}"] input`);
+            const fileInput = container.querySelector(`[data-upload="${field.name}"] input[data-main-upload="true"]`);
             if (fileInput?.files?.length > 0) {
               fileFields.push({ name: field.name, files: fileInput.files });
             }
