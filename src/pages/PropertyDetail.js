@@ -368,16 +368,24 @@ export const renderPropertyDetail = async (container, id) => {
         const shareLocation = priorityLocationValue || 'Location unavailable';
         const area = item.tradeArea || 'Trade area not specified';
         const sqft = item.size ? `${item.size} sqft` : 'Size N/A';
+        const rate = item.price ? `₹${item.price}/sqft` : 'Rate N/A';
+        const shareText = [
+          `Property: ${item.name}`,
+          `Trade Area: ${area}`,
+          `Location: ${shareLocation}`,
+          `Size: ${sqft}`,
+          `Rate: ${rate}`
+        ].join('\n');
         const shareData = {
           title: `Foottfall: ${item.name}`,
-          text: `Check out this retail property: ${item.name}\nArea: ${area}\nLocation: ${shareLocation}\nSize: ${sqft}${item.price ? `\nPrice: ₹${item.price}/sqft` : ''}`,
+          text: shareText,
           url: window.location.href
         };
         try {
           if (navigator.share) {
             await navigator.share(shareData);
           } else {
-            await navigator.clipboard.writeText(`${shareData.text}\n\nLink: ${shareData.url}`);
+            await navigator.clipboard.writeText(`${shareText}\nLink: ${shareData.url}`);
             const { showToast } = await import('../utils/ui.js');
             showToast('Details copied to clipboard', 'success');
           }

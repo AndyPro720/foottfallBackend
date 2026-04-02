@@ -22,9 +22,9 @@ export function showToast(message, type = 'success', action = null) {
   if (action && action.text && action.onClick) {
     const btn = document.createElement('button');
     btn.textContent = action.text;
-    btn.style.background = 'rgba(255,255,255,0.15)';
+    btn.style.background = 'rgba(255,255,255,0.22)';
     btn.style.color = '#fff';
-    btn.style.border = 'none';
+    btn.style.border = '1px solid rgba(255,255,255,0.24)';
     btn.style.padding = '4px 10px';
     btn.style.borderRadius = '4px';
     btn.style.fontSize = '12px';
@@ -40,8 +40,8 @@ export function showToast(message, type = 'success', action = null) {
     };
     
     // Slight hover fx
-    btn.onmouseenter = () => btn.style.background = 'rgba(255,255,255,0.25)';
-    btn.onmouseleave = () => btn.style.background = 'rgba(255,255,255,0.15)';
+    btn.onmouseenter = () => btn.style.background = 'rgba(255,255,255,0.3)';
+    btn.onmouseleave = () => btn.style.background = 'rgba(255,255,255,0.22)';
     
     toast.appendChild(btn);
   }

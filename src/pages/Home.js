@@ -1,6 +1,8 @@
 import { getInventoryItems } from '../backend/inventoryService.js';
 import { getAllUsers } from '../backend/userRoleService.js';
 
+let homeCacheHtml = '';
+
 function toFiniteNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -15,7 +17,6 @@ function getDisplayLocation(item) {
   if (tradeArea) return tradeArea;
   return '';
 }
-
 
 function getMapLink(item) {
   const googleMapsLink = String(item.googleMapsLink || '').trim();
@@ -37,15 +38,142 @@ function getMapLink(item) {
   return '';
 }
 
-export const renderHome = async (container) => {
-  // Show skeleton while loading
+function attachHomeInteractions(container) {
+  container.querySelectorAll('.card-location-link').forEach((locationEl) => {
+    locationEl.addEventListener('click', (event) => {
+      const mapLink = locationEl.dataset.mapLink;
+      if (!mapLink) return;
+      event.preventDefault();
+      event.stopPropagation();
+      window.open(mapLink, '_blank', 'noopener');
+    });
+  });
+
+  container.querySelectorAll('.property-card-link').forEach((cardEl) => {
+    cardEl.addEventListener('click', () => {
+      sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
+    });
+  });
+
+  const exportBtn = document.getElementById('export-trigger');
+  if (!exportBtn) return;
+
+  exportBtn.onclick = async () => {
+    const btn = document.getElementById('export-trigger');
+    const { showToast } = await import('../utils/ui.js');
+    btn.disabled = true;
+    btn.textContent = 'Exporting...';
+
+    try {
+      const response = await fetch('https://asia-south1-footfall-inventory.cloudfunctions.net/exportInventoryToJSON');
+      if (response.ok) {
+        showToast('Website inventory updated!', 'success');
+      } else {
+        showToast('Export failed. Check logic or permissions.', 'error');
+      }
+    } catch (err) {
+      showToast('Export failed. Check internet connection.', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+        Export to Website
+      `;
+    }
+  };
+}
+
+function buildCardHtml(item, i, userNameMap) {
+  const categories = ['buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan'];
+  let totalPhotos = 0;
+  let firstThumb = null;
+
+  if (item.images) {
+    categories.forEach(cat => {
+      if (Array.from(item.images[cat] || []).length > 0) {
+        totalPhotos += item.images[cat].length;
+        if (!firstThumb) firstThumb = item.images[cat][0];
+      }
+    });
+  }
+
+  const displayLocation = getDisplayLocation(item);
+  const mapLink = getMapLink(item);
+  const size = toFiniteNumber(item.size);
+  const perSqft = toFiniteNumber(item.price);
+  const hasSize = size !== null && size > 0;
+  const hasPerSqft = perSqft !== null && perSqft > 0;
+  const totalRent = hasSize && hasPerSqft ? size * perSqft : null;
+  const sizeLabel = hasSize ? `${size} sqft` : 'Size N/A';
+  const floorText = String(item.floor || '').trim();
+  const floorLabel = floorText ? `Floor ${floorText}` : 'Floor N/A';
+  const rateLabel = hasPerSqft ? `${formatINR(perSqft)}/sqft` : 'Rate N/A';
+  const footerMeta = [sizeLabel, floorLabel, rateLabel].join(' · ');
+  const hasBackgroundUpload = Boolean(item.mediaUploadPending);
+
+  return `
+    <a href="#property/${item.id}" class="card card-interactive animate-enter property-card-link" style="--delay:${(i + 1) * 60}ms; text-decoration: none; display: block; color: inherit;">
+      <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
+        <div class="card-thumbnail-wrapper property-card-thumbnail">
+          ${firstThumb ? `
+            <img src="${firstThumb}" class="card-thumbnail" alt="${item.name}" loading="lazy" />
+          ` : `
+            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-tertiary)">
+              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            </div>
+          `}
+          ${totalPhotos > 0 ? `<div class="card-photo-badge">${totalPhotos}</div>` : ''}
+        </div>
+        <div style="flex:1">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 8px;">
+            <h3 class="text-subheading">${item.name || 'Unnamed Property'}</h3>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap: var(--space-xs);">
+              ${totalRent ? `<span class="badge badge-rent">${formatINR(totalRent)}</span>` : ''}
+              ${!totalRent && hasPerSqft ? `<span class="badge">${formatINR(perSqft)}/sqft</span>` : ''}
+              ${(item.syncPending || hasBackgroundUpload) ? `<span class="badge badge-sync">Sync Pending</span>` : ''}
+            </div>
+          </div>
+          ${displayLocation
+            ? `<p class="text-label ${mapLink ? 'card-location-link' : ''}" ${mapLink ? `data-map-link="${mapLink}"` : ''} style="margin-top:var(--space-xs)">${displayLocation}</p>`
+            : '<p class="text-label" style="margin-top:var(--space-xs)">No location</p>'
+          }
+        </div>
+      </div>
+      <div class="card-footer" style="display:flex;align-items:center;gap:var(--space-sm)">
+        <span class="status-dot status-active"></span>
+        <span class="text-caption">${footerMeta}</span>
+        ${window.userProfile?.role === 'admin' ? `
+          <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail?.split('@')[0] || userNameMap[item.createdBy] || 'Unknown Agent'}</span>
+        ` : ''}
+      </div>
+    </a>
+  `;
+}
+
+export const invalidateHomeCache = () => {
+  homeCacheHtml = '';
+};
+
+window.__invalidateHomeCache = invalidateHomeCache;
+window.__hasHomeCache = () => Boolean(homeCacheHtml);
+
+export const renderHome = async (container, options = {}) => {
+  const useCache = options.useCache !== false;
+  const forceRefresh = options.forceRefresh === true;
+
+  if (useCache && !forceRefresh && homeCacheHtml) {
+    container.innerHTML = homeCacheHtml;
+    attachHomeInteractions(container);
+    return;
+  }
+
   container.innerHTML = `
     <div class="page-header">
       <h1 class="text-display">Your Properties</h1>
       <p class="text-label">Loading inventory...</p>
     </div>
     <div class="page-content">
-      ${[0,1,2].map(i => `<div class="skeleton skeleton-card animate-enter" style="--delay:${i * 80}ms"></div>`).join('')}
+      ${[0, 1, 2].map(i => `<div class="skeleton skeleton-card animate-enter" style="--delay:${i * 80}ms"></div>`).join('')}
     </div>
   `;
 
@@ -54,13 +182,12 @@ export const renderHome = async (container) => {
       import('../utils/ui.js').then(({ showToast }) => {
         showToast('Updated data available', 'info', {
           text: 'Refresh',
-          onClick: () => renderHome(container)
+          onClick: () => renderHome(container, { useCache: false, forceRefresh: true })
         });
       });
     });
     const isOffline = !navigator.onLine;
 
-    // Admin: Build a UID→name lookup so we can show readable names on cards
     let userNameMap = {};
     if (window.userProfile?.role === 'admin') {
       try {
@@ -69,7 +196,7 @@ export const renderHome = async (container) => {
           userNameMap[u.id] = u.displayName || u.email?.split('@')[0] || 'Unknown';
         });
       } catch (e) {
-        // Non-critical, just show fallback names
+        // non-critical
       }
     }
 
@@ -91,75 +218,12 @@ export const renderHome = async (container) => {
           </a>
         </div>
       `;
+      homeCacheHtml = container.innerHTML;
+      attachHomeInteractions(container);
       return;
     }
 
-    const cardsHtml = items.map((item, i) => {
-      // Calculate total photos across all categories
-      const categories = ['buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan'];
-      let totalPhotos = 0;
-      let firstThumb = null;
-
-      if (item.images) {
-        categories.forEach(cat => {
-          if (Array.from(item.images[cat] || []).length > 0) {
-            totalPhotos += item.images[cat].length;
-            if (!firstThumb) firstThumb = item.images[cat][0];
-          }
-        });
-      }
-
-      const displayLocation = getDisplayLocation(item);
-      const mapLink = getMapLink(item);
-      const size = toFiniteNumber(item.size);
-      const perSqft = toFiniteNumber(item.price);
-      const hasSize = size !== null && size > 0;
-      const hasPerSqft = perSqft !== null && perSqft > 0;
-      const totalRent = hasSize && hasPerSqft ? size * perSqft : null;
-      const sizeLabel = hasSize ? `${size} sqft` : 'Size N/A';
-      const floorText = String(item.floor || '').trim();
-      const floorLabel = floorText ? `Floor ${floorText}` : 'Floor N/A';
-      const rateLabel = hasPerSqft ? `${formatINR(perSqft)}/sqft` : 'Rate N/A';
-      const footerMeta = [sizeLabel, floorLabel, rateLabel].join(' · ');
-
-      return `
-        <a href="#property/${item.id}" class="card card-interactive animate-enter property-card-link" style="--delay:${(i + 1) * 60}ms; text-decoration: none; display: block; color: inherit;">
-          <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
-            <div class="card-thumbnail-wrapper property-card-thumbnail">
-              ${firstThumb ? `
-                <img src="${firstThumb}" class="card-thumbnail" alt="${item.name}" loading="lazy" />
-              ` : `
-                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-tertiary)">
-                  <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                </div>
-              `}
-              ${totalPhotos > 0 ? `<div class="card-photo-badge">${totalPhotos}</div>` : ''}
-            </div>
-            <div style="flex:1">
-              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 8px;">
-                <h3 class="text-subheading">${item.name || 'Unnamed Property'}</h3>
-                <div style="display:flex; flex-direction:column; align-items:flex-end; gap: var(--space-xs);">
-                  ${totalRent ? `<span class="badge badge-rent">${formatINR(totalRent)}</span>` : ''}
-                  ${!totalRent && hasPerSqft ? `<span class="badge">${formatINR(perSqft)}/sqft</span>` : ''}
-                  ${item.syncPending ? `<span class="badge badge-sync">Sync Pending</span>` : ''}
-                </div>
-              </div>
-              ${displayLocation
-                ? `<p class="text-label ${mapLink ? 'card-location-link' : ''}" ${mapLink ? `data-map-link="${mapLink}"` : ''} style="margin-top:var(--space-xs)">${displayLocation}</p>`
-                : '<p class="text-label" style="margin-top:var(--space-xs)">No location</p>'
-              }
-            </div>
-          </div>
-          <div class="card-footer" style="display:flex;align-items:center;gap:var(--space-sm)">
-            <span class="status-dot status-active"></span>
-            <span class="text-caption">${footerMeta}</span>
-            ${window.userProfile?.role === 'admin' ? `
-              <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail?.split('@')[0] || userNameMap[item.createdBy] || 'Unknown Agent'}</span>
-            ` : ''}
-          </div>
-        </a>
-      `;
-    }).join('');
+    const cardsHtml = items.map((item, i) => buildCardHtml(item, i, userNameMap)).join('');
 
     container.innerHTML = `
       <div class="page-header animate-enter">
@@ -182,48 +246,8 @@ export const renderHome = async (container) => {
       </div>
     `;
 
-    // ─── Export Trigger Handler ───
-    container.querySelectorAll('.card-location-link').forEach((locationEl) => {
-      locationEl.addEventListener('click', (event) => {
-        const mapLink = locationEl.dataset.mapLink;
-        if (!mapLink) return;
-        event.preventDefault();
-        event.stopPropagation();
-        window.open(mapLink, '_blank', 'noopener');
-      });
-    });
-
-    container.querySelectorAll('.property-card-link').forEach((cardEl) => {
-      cardEl.addEventListener('click', (event) => {
-        const clickedThumb = Boolean(event.target.closest('.property-card-thumbnail'));
-        sessionStorage.setItem('route-preserve-scroll', clickedThumb ? '1' : '0');
-      });
-    });
-
-    document.getElementById('export-trigger').onclick = async () => {
-      const btn = document.getElementById('export-trigger');
-      const { showToast } = await import('../utils/ui.js');
-      btn.disabled = true;
-      btn.textContent = 'Exporting...';
-      
-      try {
-        // Manual trigger Cloud Function
-        const response = await fetch('https://asia-south1-footfall-inventory.cloudfunctions.net/exportInventoryToJSON');
-        if (response.ok) {
-          showToast('Website inventory updated!', 'success');
-        } else {
-          showToast('Export failed. Check logic or permissions.', 'error');
-        }
-      } catch (err) {
-        showToast('Export failed. Check internet connection.', 'error');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = `
-          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-          Export to Website
-        `;
-      }
-    };
+    homeCacheHtml = container.innerHTML;
+    attachHomeInteractions(container);
   } catch (err) {
     console.error('Dashboard error:', err);
     container.innerHTML = `

@@ -84,7 +84,7 @@ function renderToggle(field) {
             <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <p class="text-caption">Tap to add photo/video</p>
             <input type="file" data-main-upload="true" accept="image/*,video/*" />
-            <input type="file" data-video-capture="true" accept="video/*" capture="environment" />
+            <input type="file" data-video-capture="true" accept="video/*" capture="camcorder" />
             <button type="button" class="capture-video-btn">Record Video</button>
           </div>
           <div class="file-preview-grid" data-previews="${field.name}Photo"></div>
@@ -102,7 +102,7 @@ function renderFileUpload(field) {
         <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
         <p class="text-caption">${field.multiple ? 'Tap to add photos/videos' : 'Tap to upload'}</p>
         <input type="file" data-main-upload="true" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} />
-        <input type="file" data-video-capture="true" accept="video/*" capture="environment" />
+        <input type="file" data-video-capture="true" accept="video/*" capture="camcorder" />
         <button type="button" class="capture-video-btn">Record Video</button>
       </div>
       <div class="file-preview-grid" data-previews="${field.name}"></div>
@@ -431,9 +431,8 @@ export const renderIntakeForm = (container) => {
     btn.disabled = true;
 
     try {
-      // 1. Collect all non-file fields first
       const data = {};
-      const fileFields = []; // To track which fields have files to upload
+      const fileFields = [];
 
       SECTIONS.forEach(section => {
         section.fields.forEach(field => {
@@ -443,13 +442,11 @@ export const renderIntakeForm = (container) => {
             const isYes = activeBtn?.dataset.value === 'yes';
             data[field.name] = isYes;
 
-            // Count fields
             if (field.hasCount && isYes) {
               const countInput = container.querySelector(`#${field.name}Count`);
               if (countInput?.value) data[`${field.name}Count`] = Number(countInput.value);
             }
 
-            // Facility photos (conditional)
             if (field.hasPhoto && isYes) {
               const fileInput = container.querySelector(`[data-upload="${field.name}Photo"] input[data-main-upload="true"]`);
               if (fileInput?.files?.length > 0) {
@@ -468,7 +465,6 @@ export const renderIntakeForm = (container) => {
         });
       });
 
-      // Capture Map Coordinates
       const lat = document.getElementById('latitude')?.value;
       const lng = document.getElementById('longitude')?.value;
       if (lat && lng) {
@@ -477,49 +473,68 @@ export const renderIntakeForm = (container) => {
       }
 
       data.status = 'active';
+      data.images = {};
+      data.mediaUploadPending = fileFields.length > 0;
 
-      data.images = {}; // Prepare images object
-
-      // 2. Create the initial document (this writes to Firestore local cache immediately)
       const docId = await createInventoryItem(data);
-
-      // 3. Handle photo uploads only if ONLINE
-      if (fileFields.length > 0) {
-        if (!navigator.onLine) {
-          showToast('Property saved locally! Upload photos later when back online.', 'warning');
-          window.location.hash = '#';
-          return;
-        }
-
-        const totalSteps = fileFields.length;
-        let completedSteps = 0;
-
-        for (const field of fileFields) {
-          btn.textContent = `Uploading ${field.name}... ${Math.round((completedSteps / totalSteps) * 100)}%`;
-
-          const path = `properties/${docId}/${field.name}`;
-          try {
-            const urls = await uploadMultipleFiles(field.files, path);
-
-            if (urls.length > 0) {
-              const updateData = {};
-              if (field.isFacility) {
-                updateData[`${field.name}Photo`] = urls[0];
-              } else {
-                updateData[`images.${field.name}`] = urls;
-              }
-              await updateInventoryItem(docId, updateData);
-            }
-          } catch (uploadErr) {
-            console.error(`Upload failed for ${field.name}:`, uploadErr);
-            showToast(`Could not upload ${field.name}. Save the property first and try again later.`, 'error');
-          }
-
-          completedSteps++;
-        }
+      if (typeof window.__invalidateHomeCache === 'function') {
+        window.__invalidateHomeCache();
       }
 
-      // Success toast
+      if (fileFields.length > 0) {
+        const runBackgroundUpload = async () => {
+          if (!navigator.onLine) {
+            showToast('Property saved. Media upload will continue when internet is back.', 'warning');
+            window.addEventListener('online', () => {
+              runBackgroundUpload().catch((retryErr) => {
+                console.error('Background media upload retry failed:', retryErr);
+              });
+            }, { once: true });
+            return;
+          }
+
+          let hadUploadFailure = false;
+          for (const field of fileFields) {
+            const path = `properties/${docId}/${field.name}`;
+            try {
+              const urls = await uploadMultipleFiles(field.files, path);
+              if (urls.length > 0) {
+                const updateData = {};
+                if (field.isFacility) {
+                  updateData[`${field.name}Photo`] = urls[0];
+                } else {
+                  updateData[`images.${field.name}`] = urls;
+                }
+                await updateInventoryItem(docId, updateData);
+              }
+            } catch (uploadErr) {
+              hadUploadFailure = true;
+              console.error(`Upload failed for ${field.name}:`, uploadErr);
+            }
+          }
+
+          await updateInventoryItem(docId, { mediaUploadPending: false });
+          if (typeof window.__invalidateHomeCache === 'function') {
+            window.__invalidateHomeCache();
+          }
+
+          if (hadUploadFailure) {
+            showToast('Property created. Some media failed to sync.', 'error');
+          } else {
+            showToast('Property media synced in background.', 'success');
+          }
+        };
+
+        showToast('Property saved. You can continue adding more while media uploads.', 'info');
+        window.location.hash = '#';
+        setTimeout(() => {
+          runBackgroundUpload().catch((bgErr) => {
+            console.error('Background media upload failed:', bgErr);
+          });
+        }, 0);
+        return;
+      }
+
       showToast('Property registered successfully!', 'success');
       window.location.hash = '#';
     } catch (err) {

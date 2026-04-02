@@ -16,6 +16,13 @@ import { renderAdminPage } from './pages/Admin.js';
 
 const app = document.getElementById('app');
 let topBarDocClickHandler = null;
+let lastHash = window.location.hash || '#';
+
+function applyPlatformClasses() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  document.body.classList.toggle('ios-pwa', Boolean(isIOS && isStandalone));
+}
 
 // ─── Initialize Service Worker ───
 const updateSW = registerSW({
@@ -192,11 +199,17 @@ function renderSkeleton() {
 // ─── Router ───
 const router = async () => {
   const hash = window.location.hash || '#';
-  const preserveScroll = sessionStorage.getItem('route-preserve-scroll') === '1';
-  sessionStorage.removeItem('route-preserve-scroll');
+  const previousHash = lastHash;
+  lastHash = hash;
 
-  // Render shell with skeleton loading
-  app.innerHTML = renderSkeleton();
+  if (previousHash === '#') {
+    sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
+  }
+
+  const canReuseHome = hash === '#' && typeof window.__hasHomeCache === 'function' && window.__hasHomeCache();
+  if (!canReuseHome) {
+    app.innerHTML = renderSkeleton();
+  }
 
   // Ensure top bar is rendered
   const existingTopBar = document.querySelector('.top-bar');
@@ -244,7 +257,7 @@ const router = async () => {
     }
 
     if (hash === '#') {
-      await renderHome(app);
+      await renderHome(app, { useCache: true });
     } else if (hash === '#add') {
       renderIntakeForm(app);
     } else if (hash === '#admin') {
@@ -306,7 +319,10 @@ VITE_FIREBASE_APP_ID=your_app_id</pre>
     `;
   }
 
-  if (!preserveScroll) {
+  if (hash === '#') {
+    const savedScroll = Number(sessionStorage.getItem('home-scroll-y') || 0);
+    window.scrollTo({ top: Number.isFinite(savedScroll) ? savedScroll : 0, left: 0, behavior: 'auto' });
+  } else {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
 
@@ -319,6 +335,8 @@ window.addEventListener('hashchange', router);
 if ('scrollRestoration' in window.history) {
   window.history.scrollRestoration = 'manual';
 }
+
+applyPlatformClasses();
 
 // ─── Auth State & Boot Sequence ───
 // CRITICAL: Firebase's onAuthStateChanged can take SECONDS to fire when offline
