@@ -16,8 +16,10 @@ export const SECTIONS = [
       { name: 'size', label: 'Carpet Area (sq ft)', type: 'number', required: false, placeholder: 'Carpet area' },
       { name: 'floor', label: 'Which Floor', type: 'text', placeholder: 'e.g., Ground, 1st, 2nd' },
       { name: 'entryToBuilding', label: 'Entry to Building Photo', type: 'file', accept: 'image/*,video/*' },
+      { name: 'googleMapsLink', label: 'Google Map Link', type: 'text', placeholder: 'Paste Google Maps URL' },
       { name: 'location', label: 'Exact Location / Address', type: 'text', required: false, placeholder: 'Full address' },
       { name: 'tradeArea', label: 'Trade Area', type: 'text', placeholder: 'e.g., MG Road, Connaught Place' },
+
       { name: 'suitableFor', label: 'Suitable For', type: 'text', placeholder: 'e.g., F&B, Retail, Services' },
     ]
   },

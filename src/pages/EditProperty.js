@@ -32,7 +32,7 @@ function mergeFilesIntoInput(input, incomingFiles) {
   return true;
 }
 
-// ─── Render Helpers (Reused from IntakeForm) ───
+// Render helpers (reused from IntakeForm)
 
 function renderField(field, value) {
   let html = '';
@@ -45,16 +45,21 @@ function renderField(field, value) {
     html += `
       <div id="map-picker-container" class="form-group animate-enter" style="--delay:200ms">
         <label class="form-label">Property Pin Location (Voluntary)</label>
-        <div style="display:flex; gap:var(--space-sm); margin-bottom:var(--space-sm)">
-          <button type="button" class="btn-secondary" id="gps-btn" style="flex:1; min-height:36px; font-size:12px">
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-            Use My Location
-          </button>
-          <button type="button" class="btn-secondary" id="clear-pin-btn" style="flex:1; min-height:36px; font-size:12px; border-color:var(--destructive); color:var(--destructive)">
-            Clear Pin
-          </button>
+        <button type="button" class="btn-secondary btn-sm" id="toggle-map-picker-btn" style="width:auto; min-height:0; padding:6px 12px; font-size:11px; align-self:flex-start">
+          View Interactive Map
+        </button>
+        <div id="map-picker-wrapper" style="display:none; margin-top:var(--space-sm)">
+          <div style="display:flex; gap:var(--space-sm); margin-bottom:var(--space-sm)">
+            <button type="button" class="btn-secondary" id="gps-btn" style="flex:1; min-height:36px; font-size:12px">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+              Use My Location
+            </button>
+            <button type="button" class="btn-secondary" id="clear-pin-btn" style="flex:1; min-height:36px; font-size:12px; border-color:var(--destructive); color:var(--destructive)">
+              Clear Pin
+            </button>
+          </div>
+          <div id="map-picker"></div>
         </div>
-        <div id="map-picker"></div>
         <input type="hidden" id="latitude" name="latitude" value="${item?.latitude || ''}" />
         <input type="hidden" id="longitude" name="longitude" value="${item?.longitude || ''}" />
       </div>
@@ -69,7 +74,7 @@ function renderTextField(field, value = '') {
   return `
     <div class="form-group">
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
-      <input class="form-input" type="${field.type}" id="${field.name}" name="${field.name}" 
+      <input class="form-input" type="${field.type}" id="${field.name}" name="${field.name}"
              placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''} value="${value}" />
     </div>
   `;
@@ -131,7 +136,7 @@ function renderFileUpload(field, existingUrls = []) {
       <div class="file-preview-grid" data-previews="${field.name}">
         ${(existingUrls || []).map(url => `
           <div class="file-preview-item">
-            ${isVideo(url) 
+            ${isVideo(url)
               ? `<video src="${url}" class="file-preview-thumb" muted preload="metadata"></video>`
               : `<img src="${url}" class="file-preview-thumb" />`
             }
@@ -190,8 +195,8 @@ export const renderEditProperty = async (container, id) => {
     </form>
   `;
 
-  // ─── Dynamic Behaviors (Mostly cloned from IntakeForm) ───
-  
+  // Dynamic behaviors (mostly cloned from IntakeForm)
+
   // Section headers
   container.querySelectorAll('.form-section-header').forEach(header => {
     header.addEventListener('click', () => header.parentElement.classList.toggle('collapsed'));
@@ -327,17 +332,35 @@ export const renderEditProperty = async (container, id) => {
 
   });
 
-
-
-  // ─── Phase 9: Initialize Map for Editing ───
+  // Map picker: hidden by default and initialized only when opened
   let map, marker;
-  setTimeout(() => {
+  let isMapInitialized = false;
+  const mapWrapper = document.getElementById('map-picker-wrapper');
+  const toggleMapPickerBtn = document.getElementById('toggle-map-picker-btn');
+
+  function updateMarker(newLat, newLng) {
+    document.getElementById('latitude').value = newLat;
+    document.getElementById('longitude').value = newLng;
+    if (marker) {
+      marker.setLatLng([newLat, newLng]);
+    } else if (map) {
+      marker = L.marker([newLat, newLng], { draggable: true }).addTo(map);
+      marker.on('dragend', (e) => {
+        const pos = e.target.getLatLng();
+        updateMarker(pos.lat, pos.lng);
+      });
+    }
+  }
+
+  const initializeMapPicker = () => {
+    if (isMapInitialized) return;
     const mapEl = document.getElementById('map-picker');
     if (!mapEl) return;
 
+    isMapInitialized = true;
     const lat = Number(item.latitude) || 20.5937;
     const lng = Number(item.longitude) || 78.9629;
-    const hasExisting = !!(item.latitude && item.longitude);
+    const hasExisting = Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude));
 
     map = L.map('map-picker', {
       zoomControl: true,
@@ -347,12 +370,11 @@ export const renderEditProperty = async (container, id) => {
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '© OpenStreetMap'
+      attribution: 'OpenStreetMap'
     }).addTo(map);
 
-    // Add Search Bar
     if (L.Control.Geocoder) {
-      const geocoder = L.Control.geocoder({
+      L.Control.geocoder({
         defaultMarkGeocode: false,
         placeholder: 'Search address...',
       }).on('markgeocode', function(e) {
@@ -360,20 +382,6 @@ export const renderEditProperty = async (container, id) => {
         map.setView(center, 16);
         updateMarker(center.lat, center.lng);
       }).addTo(map);
-    }
-
-    function updateMarker(newLat, newLng) {
-      document.getElementById('latitude').value = newLat;
-      document.getElementById('longitude').value = newLng;
-      if (marker) {
-        marker.setLatLng([newLat, newLng]);
-      } else {
-        marker = L.marker([newLat, newLng], { draggable: true }).addTo(map);
-        marker.on('dragend', (e) => {
-          const pos = e.target.getLatLng();
-          updateMarker(pos.lat, pos.lng);
-        });
-      }
     }
 
     if (hasExisting) {
@@ -384,18 +392,18 @@ export const renderEditProperty = async (container, id) => {
       updateMarker(e.latlng.lat, e.latlng.lng);
     });
 
-    // "Use My Location" Button
     document.getElementById('gps-btn').onclick = () => {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition((pos) => {
           const { latitude, longitude } = pos.coords;
           map.setView([latitude, longitude], 17);
           updateMarker(latitude, longitude);
-        }, (err) => alert('GPS failed: ' + err.message));
+        }, (err) => showToast('GPS failed: ' + err.message, 'error'));
+      } else {
+        showToast('GPS not supported', 'error');
       }
     };
 
-    // "Clear Pin" Button
     document.getElementById('clear-pin-btn').onclick = () => {
       if (marker) {
         map.removeLayer(marker);
@@ -404,12 +412,23 @@ export const renderEditProperty = async (container, id) => {
       document.getElementById('latitude').value = '';
       document.getElementById('longitude').value = '';
     };
+  };
 
-    setTimeout(() => map.invalidateSize(), 500);
-  }, 100);
+  if (toggleMapPickerBtn && mapWrapper) {
+    toggleMapPickerBtn.onclick = () => {
+      const shouldOpen = mapWrapper.style.display === 'none';
+      mapWrapper.style.display = shouldOpen ? 'block' : 'none';
+      toggleMapPickerBtn.textContent = shouldOpen ? 'Hide Interactive Map' : 'View Interactive Map';
+
+      if (shouldOpen) {
+        initializeMapPicker();
+        setTimeout(() => map?.invalidateSize(), 150);
+      }
+    };
+  }
 
 
-  // ─── Submit (Update) ───
+  // Submit (Update)
 
   document.getElementById('edit-form').onsubmit = async (e) => {
     e.preventDefault();
@@ -434,7 +453,7 @@ export const renderEditProperty = async (container, id) => {
             // Check if existing facility photo was removed
             const preview = container.querySelector(`[data-previews="${field.name}Photo"] .file-preview-item`);
             if (!preview && item[`${field.name}Photo`]) {
-              data[`${field.name}Photo`] = null; 
+              data[`${field.name}Photo`] = null;
             }
             if (field.hasPhoto && isYes) {
               const fileInput = container.querySelector(`[data-upload="${field.name}Photo"] input[data-main-upload="true"]`);

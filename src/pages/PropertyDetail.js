@@ -12,15 +12,67 @@ function isPdfUrl(url) {
   return PDF_FILE_RE.test(String(url || ''));
 }
 
-function getDisplayLocation(item) {
+function getNormalizedGoogleMapLink(item) {
+  const rawLink = String(item.googleMapsLink || '').trim();
+  if (!rawLink) return '';
+  return /^https?:\/\//i.test(rawLink) ? rawLink : `https://${rawLink}`;
+}
+
+function hasPinnedCoordinates(item) {
+  const latitude = Number(item.latitude);
+  const longitude = Number(item.longitude);
+  return Number.isFinite(latitude) && Number.isFinite(longitude);
+}
+
+function getPriorityLocationValue(item) {
+  const googleMapsLink = getNormalizedGoogleMapLink(item);
+  if (googleMapsLink) return googleMapsLink;
+
+  if (hasPinnedCoordinates(item)) {
+    const latitude = Number(item.latitude);
+    const longitude = Number(item.longitude);
+    return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+  }
+
   const manualLocation = String(item.location || '').trim();
   if (manualLocation) return manualLocation;
 
-  const latitude = Number(item.latitude);
-  const longitude = Number(item.longitude);
-  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-    return `Pinned: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+  return '';
+}
+
+function getPriorityMapLink(item) {
+  const googleMapsLink = getNormalizedGoogleMapLink(item);
+  if (googleMapsLink) return googleMapsLink;
+
+  if (hasPinnedCoordinates(item)) {
+    const latitude = Number(item.latitude);
+    const longitude = Number(item.longitude);
+    return `https://www.google.com/maps?q=${latitude},${longitude}`;
   }
+
+  const manualLocation = String(item.location || '').trim();
+  if (manualLocation) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(manualLocation)}`;
+  }
+
+  return '';
+}
+
+function getPriorityLocationLabel(item) {
+  const tradeArea = String(item.tradeArea || '').trim();
+  if (tradeArea) return tradeArea;
+
+  const manualLocation = String(item.location || '').trim();
+  if (manualLocation && !/^https?:\/\//i.test(manualLocation)) return manualLocation;
+
+  if (hasPinnedCoordinates(item)) {
+    const latitude = Number(item.latitude);
+    const longitude = Number(item.longitude);
+    return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+  }
+
+  const googleMapsLink = getNormalizedGoogleMapLink(item);
+  if (googleMapsLink) return 'Open Google Map';
 
   return '';
 }
@@ -69,12 +121,23 @@ export const renderPropertyDetail = async (container, id) => {
     }
 
     // ─── Render Sections ───
+    const googleMapsLink = getNormalizedGoogleMapLink(item);
+    const hasLeafletPin = hasPinnedCoordinates(item);
+    const fallbackAddress = String(item.location || '').trim();
+    const priorityLocationValue = getPriorityLocationValue(item);
+    const priorityMapLink = getPriorityMapLink(item);
+    const priorityLocationLabel = getPriorityLocationLabel(item);
+
     const sectionsHtml = SECTIONS.map(section => {
       if (section.id === 'photos') return renderPhotoGallery(item);
 
       let fieldsHtml = section.fields.map(field => {
+        if (section.id === 'property-info' && (field.name === 'googleMapsLink' || field.name === 'location')) {
+          return '';
+        }
+
         const value = item[field.name];
-        
+
         if (field.type === 'toggle') {
           return `
             <div class="detail-item">
@@ -124,12 +187,38 @@ export const renderPropertyDetail = async (container, id) => {
           </div>
           <div class="card-body detail-grid">
             ${fieldsHtml}
-            ${section.id === 'property-info' && item.latitude && item.longitude ? `
-              <div class="detail-item" style="grid-column: 1 / -1">
-                <span class="text-label" style="margin-bottom: var(--space-xs)">Pinned Location</span>
-                <div id="static-map" class="static-map-preview"></div>
+            ${section.id === 'property-info' ? `
+              <div class="detail-item location-detail-item" style="grid-column: 1 / -1">
+                <span class="text-label" style="margin-bottom: var(--space-xs)">Location Details</span>
+
+                ${googleMapsLink ? `
+                  <div class="location-priority-box">
+                    <span class="text-caption" style="display:block; margin-bottom:4px">Google Map Link</span>
+                    <a href="${googleMapsLink}" target="_blank" rel="noopener" class="link-primary">
+                      Open Google Map
+                    </a>
+                  </div>
+                ` : hasLeafletPin ? `
+                  <div class="location-priority-box">
+                    <span class="text-caption" style="display:block; margin-bottom:4px">Pinned Map Location</span>
+                    <button type="button" class="btn-secondary btn-sm" id="toggle-map-btn" style="width:auto; min-height:0; padding:4px 12px; font-size:11px">
+                      View Interactive Map
+                    </button>
+                    <div id="static-map-container" style="display:none; margin-top:var(--space-sm)">
+                      <div id="static-map" class="static-map-preview"></div>
+                    </div>
+                  </div>
+                ` : fallbackAddress ? `
+                  <div class="location-priority-box">
+                    <span class="text-caption" style="display:block; margin-bottom:4px">Exact Address</span>
+                    <p class="text-body" style="font-size:13px; margin:0">${fallbackAddress}</p>
+                  </div>
+                ` : `
+                  <p class="text-caption">No location details available</p>
+                `}
               </div>
             ` : ''}
+
 
           </div>
 
@@ -150,7 +239,7 @@ export const renderPropertyDetail = async (container, id) => {
     container.innerHTML = `
       <div class="slider-container animate-enter">
         <div class="slider-wrapper" id="detail-slider">
-          ${allMedia.length > 0 
+          ${allMedia.length > 0
             ? allMedia.map(m => `
                 <div class="slider-item" onclick="window.openLightbox('${m.url}')">
                   ${isVideoUrl(m.url)
@@ -188,17 +277,31 @@ export const renderPropertyDetail = async (container, id) => {
         <div style="display:flex; justify-content:space-between; align-items:flex-start">
           <div>
             <h1 class="text-display">${item.name}</h1>
-            <p class="text-label">${getDisplayLocation(item) || 'No location'}</p>
+            ${priorityMapLink
+              ? `<a href="${priorityMapLink}" target="_blank" rel="noopener" class="text-label card-location-link">${priorityLocationLabel || 'Open location'}</a>`
+              : `<p class="text-label">${priorityLocationLabel || 'No location'}</p>`
+            }
           </div>
-          <div class="status-select-wrapper" style="position:relative">
-            <select id="status-select" class="badge ${item.status === 'active' ? 'badge-success' : 'badge-neutral'}" style="text-transform: capitalize; border: 1px solid var(--border-default); cursor: pointer; appearance: none; padding-right: 24px; background: var(--bg-input);">
-              <option value="active" ${item.status === 'active' ? 'selected' : ''}>Active</option>
-              <option value="pending" ${(item.status === 'pending' || !item.status) ? 'selected' : ''}>Pending</option>
-              <option value="inactive" ${item.status === 'inactive' ? 'selected' : ''}>Inactive</option>
-            </select>
-            <svg class="select-chevron" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); pointer-events: none; width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px">
+            <div class="status-select-wrapper" style="position:relative">
+              <select id="status-select" class="badge ${item.status === 'active' ? 'badge-success' : 'badge-neutral'}" style="text-transform: capitalize; border: 1px solid var(--border-default); cursor: pointer; appearance: none; padding-right: 24px; background: var(--bg-input);">
+                <option value="active" ${item.status === 'active' ? 'selected' : ''}>Active</option>
+                <option value="pending" ${(item.status === 'pending' || !item.status) ? 'selected' : ''}>Pending</option>
+                <option value="inactive" ${item.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+              </select>
+              <svg class="select-chevron" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); pointer-events: none; width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+            <button class="btn-secondary btn-sm" id="share-btn" style="width:auto; min-height:0; padding:6px 12px; font-size:11px; display:flex; gap:6px">
+              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+              Share
+            </button>
+            <button class="btn-secondary btn-sm" id="copy-summary-btn" style="width:auto; min-height:0; padding:6px 12px; font-size:11px; display:flex; gap:6px">
+              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16h8M8 12h8m-8-4h8M7 20h10a2 2 0 002-2V6a2 2 0 00-2-2H7a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+              Copy Summary
+            </button>
           </div>
         </div>
+
         <div style="margin-top: var(--space-md)">
           <a href="#" class="btn-secondary" style="width:auto; padding: 8px 16px; min-height: 0;">
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
@@ -208,7 +311,7 @@ export const renderPropertyDetail = async (container, id) => {
       </div>
       <div class="page-content">
         ${sectionsHtml}
-        
+
         <div style="margin-top: var(--space-xl); display: flex; gap: var(--space-md)">
            <a href="#edit/${item.id}" class="btn-secondary" style="flex:1">Edit Details</a>
            <button class="btn-secondary destructive" style="flex:1; border-color: var(--destructive); color: var(--destructive)" id="delete-btn">Delete Property</button>
@@ -226,30 +329,82 @@ export const renderPropertyDetail = async (container, id) => {
           dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
         };
       }
-      
+
       const prevBtn = document.getElementById('slider-prev');
       const nextBtn = document.getElementById('slider-next');
       if (prevBtn) prevBtn.onclick = () => slider.scrollBy({ left: -slider.offsetWidth, behavior: 'smooth' });
       if (nextBtn) nextBtn.onclick = () => slider.scrollBy({ left: slider.offsetWidth, behavior: 'smooth' });
     }
 
-    // ─── Phase 9: Initialize Detail Map ───
-    if (item.latitude && item.longitude) {
-      setTimeout(() => {
-        const mapEl = document.getElementById('static-map');
-        if (!mapEl || !L) return;
-        const smap = L.map('static-map', { 
-          zoomControl: false, 
-          dragging: false, 
-          touchZoom: false, 
-          scrollWheelZoom: false,
-          doubleClickZoom: false,
-          boxZoom: false
-        }).setView([item.latitude, item.longitude], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(smap);
-        L.marker([item.latitude, item.longitude]).addTo(smap);
-      }, 500);
+    // ─── Map Toggle Logic ───
+    const toggleMapBtn = document.getElementById('toggle-map-btn');
+    const mapContainer = document.getElementById('static-map-container');
+    let staticMapInstance = null;
+    if (toggleMapBtn && mapContainer) {
+      toggleMapBtn.onclick = () => {
+        const isHidden = mapContainer.style.display === 'none';
+        mapContainer.style.display = isHidden ? 'block' : 'none';
+        toggleMapBtn.textContent = isHidden ? 'Hide Interactive Map' : 'View Interactive Map';
+        if (isHidden && hasLeafletPin) {
+          const latitude = Number(item.latitude);
+          const longitude = Number(item.longitude);
+          setTimeout(() => {
+            if (!staticMapInstance) {
+              staticMapInstance = L.map('static-map', { zoomControl: true }).setView([latitude, longitude], 15);
+              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(staticMapInstance);
+              L.marker([latitude, longitude]).addTo(staticMapInstance);
+            } else {
+              staticMapInstance.invalidateSize();
+            }
+          }, 100);
+        }
+      };
     }
+
+    // ─── Share Button Logic ───
+    const shareBtn = document.getElementById('share-btn');
+    if (shareBtn) {
+      shareBtn.onclick = async () => {
+        const shareLocation = priorityLocationValue || 'Location unavailable';
+        const area = item.tradeArea || 'Trade area not specified';
+        const sqft = item.size ? `${item.size} sqft` : 'Size N/A';
+        const shareData = {
+          title: `Foottfall: ${item.name}`,
+          text: `Check out this retail property: ${item.name}\nArea: ${area}\nLocation: ${shareLocation}\nSize: ${sqft}${item.price ? `\nPrice: ₹${item.price}/sqft` : ''}`,
+          url: window.location.href
+        };
+        try {
+          if (navigator.share) {
+            await navigator.share(shareData);
+          } else {
+            await navigator.clipboard.writeText(`${shareData.text}\n\nLink: ${shareData.url}`);
+            const { showToast } = await import('../utils/ui.js');
+            showToast('Details copied to clipboard', 'success');
+          }
+        } catch (err) {
+          console.warn('Share failed:', err);
+        }
+      };
+    }
+
+    const copySummaryBtn = document.getElementById('copy-summary-btn');
+    if (copySummaryBtn) {
+      copySummaryBtn.onclick = async () => {
+        const summaryLocation = priorityLocationValue || 'Location unavailable';
+        const sqft = item.size ? `${item.size} sqft` : 'Size N/A';
+        const summaryText = `${item.name || 'Unnamed Property'}\n${summaryLocation}\n${sqft}`;
+
+        try {
+          await navigator.clipboard.writeText(summaryText);
+          const { showToast } = await import('../utils/ui.js');
+          showToast('Summary copied to clipboard', 'success');
+        } catch (err) {
+          const { showToast } = await import('../utils/ui.js');
+          showToast('Clipboard copy failed', 'error');
+        }
+      };
+    }
+
 
 
     // ─── Lightbox logic ───
@@ -264,7 +419,7 @@ export const renderPropertyDetail = async (container, id) => {
       overlay.className = 'lightbox-overlay active';
       const isVideo = isVideoUrl(src);
       overlay.innerHTML = `
-        ${isVideo 
+        ${isVideo
           ? `<video src="${src}" class="lightbox-img" controls autoplay style="max-width:90%;max-height:90%"></video>`
           : `<img src="${src}" class="lightbox-img" />`
         }
@@ -276,11 +431,11 @@ export const renderPropertyDetail = async (container, id) => {
         if (vid) vid.pause();
         overlay.remove();
       };
-      overlay.onclick = (e) => { 
+      overlay.onclick = (e) => {
         if(e.target === overlay) {
           const vid = overlay.querySelector('video');
           if (vid) vid.pause();
-          overlay.remove(); 
+          overlay.remove();
         }
       };
     };

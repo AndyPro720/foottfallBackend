@@ -2,19 +2,18 @@ import { getInventoryItems } from '../backend/inventoryService.js';
 import { getAllUsers } from '../backend/userRoleService.js';
 
 function getDisplayLocation(item) {
-  const manualLocation = String(item.location || '').trim();
-  if (manualLocation) return manualLocation;
-
-  const latitude = Number(item.latitude);
-  const longitude = Number(item.longitude);
-  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-    return `Pinned: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
-  }
-
+  const tradeArea = String(item.tradeArea || '').trim();
+  if (tradeArea) return tradeArea;
   return '';
 }
 
+
 function getMapLink(item) {
+  const googleMapsLink = String(item.googleMapsLink || '').trim();
+  if (googleMapsLink) {
+    return /^https?:\/\//i.test(googleMapsLink) ? googleMapsLink : `https://${googleMapsLink}`;
+  }
+
   const latitude = Number(item.latitude);
   const longitude = Number(item.longitude);
   if (Number.isFinite(latitude) && Number.isFinite(longitude)) {

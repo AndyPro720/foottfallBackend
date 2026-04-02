@@ -8,8 +8,11 @@
   --bg-base: #061c14;
   --bg-surface: #0a3622;
   --bg-raised: #0d4a2f;
+  --bg-card: rgba(11, 62, 40, 0.92);
   --bg-overlay: rgba(255, 255, 255, 0.06);
   --bg-input: rgba(0, 0, 0, 0.25);
+  --surface-raised: rgba(255, 255, 255, 0.04);
+  --surface-hover: rgba(255, 255, 255, 0.08);
 
   /* Brand */
   --accent: #ffffff;
@@ -598,7 +601,7 @@ a { color: inherit; text-decoration: none; }
   animation: fadeUp 0.3s ease;
 }
 
-.toast {
+.toast-fallback-inline {
   position: fixed;
   bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   left: 50%;
@@ -613,12 +616,12 @@ a { color: inherit; text-decoration: none; }
   text-align: center;
 }
 
-.toast-success {
+.toast-fallback-success {
   background: var(--accent-green);
   color: var(--bg-base);
 }
 
-.toast-error {
+.toast-fallback-error {
   background: var(--destructive);
   color: white;
 }
@@ -886,6 +889,18 @@ a { color: inherit; text-decoration: none; }
   background: rgba(255, 255, 255, 0.4);
   transition: transform var(--transition-fast), background var(--transition-fast);
 }
+
+.btn-secondary:active {
+  background: var(--surface-hover);
+  transform: translateY(0);
+}
+
+.btn-sm {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: 11px;
+}
+
 
 .slider-dot.active {
   background: var(--accent);
@@ -1257,4 +1272,143 @@ a { color: inherit; text-decoration: none; }
 @keyframes slideUpToast {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ========== LOCATION & MAPS (Phase 9.1) ========== */
+.location-priority-box {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+  margin-bottom: var(--space-xs);
+  transition: all var(--transition-fast);
+}
+
+.location-priority-box:hover {
+  border-color: var(--border-hover);
+}
+
+.link-primary {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.link-primary:hover {
+  text-decoration: underline;
+}
+
+#static-map-container {
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-raised);
+}
+
+#static-map {
+  width: 100%;
+  height: 250px;
+}
+
+#share-btn svg {
+  color: var(--accent);
+}
+
+/* ========== MINIMAL POLISH (Phase 9.2) ========== */
+body {
+  background:
+    radial-gradient(1200px 500px at 80% -10%, rgba(52, 211, 153, 0.08), transparent 60%),
+    linear-gradient(180deg, var(--bg-base) 0%, var(--bg-surface) 52%, var(--bg-base) 100%);
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0) 100%), var(--bg-raised);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+}
+
+.card-interactive {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.card-interactive:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+}
+
+.btn-primary,
+.btn-secondary,
+.form-input,
+.form-select,
+.file-upload-zone {
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.btn-primary {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-secondary:active {
+  background: var(--surface-hover);
+}
+
+.form-input {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.file-upload-zone {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.location-detail-item {
+  margin-top: var(--space-xs);
+}
+
+.location-priority-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface-raised);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.link-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+}
+
+.card-location-link {
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.5);
+}
+
+#map-picker,
+#static-map-container,
+.static-map-preview {
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+#toast-container .toast {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
