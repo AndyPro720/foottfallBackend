@@ -84,7 +84,7 @@ function renderToggle(field) {
             <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
             <p class="text-caption">Tap to add photo/video</p>
             <input type="file" data-main-upload="true" accept="image/*,video/*" />
-            <input type="file" data-video-capture="true" accept="video/*" capture="camcorder" />
+            <input type="file" data-video-capture="true" accept="video/*" capture="environment" />
             <button type="button" class="capture-video-btn">Record Video</button>
           </div>
           <div class="file-preview-grid" data-previews="${field.name}Photo"></div>
@@ -102,7 +102,7 @@ function renderFileUpload(field) {
         <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
         <p class="text-caption">${field.multiple ? 'Tap to add photos/videos' : 'Tap to upload'}</p>
         <input type="file" data-main-upload="true" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} />
-        <input type="file" data-video-capture="true" accept="video/*" capture="camcorder" />
+        <input type="file" data-video-capture="true" accept="video/*" capture="environment" />
         <button type="button" class="capture-video-btn">Record Video</button>
       </div>
       <div class="file-preview-grid" data-previews="${field.name}"></div>
@@ -242,7 +242,17 @@ export const renderIntakeForm = (container) => {
       captureButton.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        videoCaptureInput.click();
+        videoCaptureInput.setAttribute('accept', 'video/*');
+        videoCaptureInput.setAttribute('capture', 'environment');
+        try {
+          if (typeof videoCaptureInput.showPicker === 'function') {
+            videoCaptureInput.showPicker();
+          } else {
+            videoCaptureInput.click();
+          }
+        } catch {
+          videoCaptureInput.click();
+        }
       });
 
       videoCaptureInput.addEventListener('change', () => {
@@ -450,13 +460,20 @@ export const renderIntakeForm = (container) => {
             if (field.hasPhoto && isYes) {
               const fileInput = container.querySelector(`[data-upload="${field.name}Photo"] input[data-main-upload="true"]`);
               if (fileInput?.files?.length > 0) {
-                fileFields.push({ name: field.name, files: fileInput.files, isFacility: true });
+                fileFields.push({
+                  name: field.name,
+                  files: Array.from(fileInput.files),
+                  isFacility: true
+                });
               }
             }
           } else if (field.type === 'file') {
             const fileInput = container.querySelector(`[data-upload="${field.name}"] input[data-main-upload="true"]`);
             if (fileInput?.files?.length > 0) {
-              fileFields.push({ name: field.name, files: fileInput.files });
+              fileFields.push({
+                name: field.name,
+                files: Array.from(fileInput.files)
+              });
             }
           } else {
             const input = container.querySelector(`#${field.name}`);
@@ -495,6 +512,12 @@ export const renderIntakeForm = (container) => {
 
           let hadUploadFailure = false;
           for (const field of fileFields) {
+            if (!Array.isArray(field.files) || field.files.length === 0) {
+              hadUploadFailure = true;
+              console.warn(`No files available in background snapshot for ${field.name}`);
+              continue;
+            }
+
             const path = `properties/${docId}/${field.name}`;
             try {
               const urls = await uploadMultipleFiles(field.files, path);
@@ -506,6 +529,8 @@ export const renderIntakeForm = (container) => {
                   updateData[`images.${field.name}`] = urls;
                 }
                 await updateInventoryItem(docId, updateData);
+              } else {
+                hadUploadFailure = true;
               }
             } catch (uploadErr) {
               hadUploadFailure = true;
@@ -513,7 +538,7 @@ export const renderIntakeForm = (container) => {
             }
           }
 
-          await updateInventoryItem(docId, { mediaUploadPending: false });
+          await updateInventoryItem(docId, { mediaUploadPending: hadUploadFailure });
           if (typeof window.__invalidateHomeCache === 'function') {
             window.__invalidateHomeCache();
           }
