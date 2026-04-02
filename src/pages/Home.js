@@ -1,7 +1,27 @@
-import { getInventoryItems } from '../backend/inventoryService.js';
+import { getInventoryItems, updateInventoryItem } from '../backend/inventoryService.js';
 import { getAllUsers } from '../backend/userRoleService.js';
 
 let homeCacheHtml = '';
+const stalePendingHandled = new Set();
+
+function getTimestampMillis(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (typeof ts.seconds === 'number') return ts.seconds * 1000;
+  const num = Number(ts);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function renderCachedHome(container, preserveScroll = false) {
+  const currentScroll = window.scrollY || 0;
+  container.innerHTML = homeCacheHtml;
+  attachHomeInteractions(container);
+  if (preserveScroll) {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: currentScroll, left: 0, behavior: 'auto' });
+    });
+  }
+}
 
 function toFiniteNumber(value) {
   const parsed = Number(value);
@@ -110,6 +130,7 @@ function buildCardHtml(item, i, userNameMap) {
   const rateLabel = hasPerSqft ? `${formatINR(perSqft)}/sqft` : 'Rate N/A';
   const footerMeta = [sizeLabel, floorLabel, rateLabel].join(' · ');
   const hasBackgroundUpload = Boolean(item.mediaUploadPending);
+  const hasOfflineSync = Boolean(item.syncPending) && !navigator.onLine;
 
   return `
     <a href="#property/${item.id}" class="card card-interactive animate-enter property-card-link" style="--delay:${(i + 1) * 60}ms; text-decoration: none; display: block; color: inherit;">
@@ -130,7 +151,8 @@ function buildCardHtml(item, i, userNameMap) {
             <div style="display:flex; flex-direction:column; align-items:flex-end; gap: var(--space-xs);">
               ${totalRent ? `<span class="badge badge-rent">${formatINR(totalRent)}</span>` : ''}
               ${!totalRent && hasPerSqft ? `<span class="badge">${formatINR(perSqft)}/sqft</span>` : ''}
-              ${(item.syncPending || hasBackgroundUpload) ? `<span class="badge badge-sync">Sync Pending</span>` : ''}
+              ${hasBackgroundUpload ? `<span class="badge badge-sync">Media Pending</span>` : ''}
+              ${!hasBackgroundUpload && hasOfflineSync ? `<span class="badge badge-sync">Sync Pending</span>` : ''}
             </div>
           </div>
           ${displayLocation
@@ -160,33 +182,65 @@ window.__hasHomeCache = () => Boolean(homeCacheHtml);
 export const renderHome = async (container, options = {}) => {
   const useCache = options.useCache !== false;
   const forceRefresh = options.forceRefresh === true;
+  const preserveScroll = options.preserveScroll === true;
+  const silent = options.silent === true;
 
   if (useCache && !forceRefresh && homeCacheHtml) {
-    container.innerHTML = homeCacheHtml;
-    attachHomeInteractions(container);
+    renderCachedHome(container, preserveScroll);
+    // Always refresh in background so sync/media badges do not get stale.
+    setTimeout(() => {
+      renderHome(container, { useCache: false, forceRefresh: true, preserveScroll: true, silent: true }).catch((err) => {
+        console.warn('Silent home refresh failed:', err);
+      });
+    }, 0);
     return;
   }
 
-  container.innerHTML = `
-    <div class="page-header">
-      <h1 class="text-display">Your Properties</h1>
-      <p class="text-label">Loading inventory...</p>
-    </div>
-    <div class="page-content">
-      ${[0, 1, 2].map(i => `<div class="skeleton skeleton-card animate-enter" style="--delay:${i * 80}ms"></div>`).join('')}
-    </div>
-  `;
+  const currentScroll = window.scrollY || 0;
+  if (!(silent && homeCacheHtml)) {
+    container.innerHTML = `
+      <div class="page-header">
+        <h1 class="text-display">Your Properties</h1>
+        <p class="text-label">Loading inventory...</p>
+      </div>
+      <div class="page-content">
+        ${[0, 1, 2].map(i => `<div class="skeleton skeleton-card animate-enter" style="--delay:${i * 80}ms"></div>`).join('')}
+      </div>
+    `;
+  }
 
   try {
     const items = await getInventoryItems({}, (newItems) => {
-      import('../utils/ui.js').then(({ showToast }) => {
-        showToast('Updated data available', 'info', {
-          text: 'Refresh',
-          onClick: () => renderHome(container, { useCache: false, forceRefresh: true })
-        });
-      });
+      if (!Array.isArray(newItems)) return;
+      // Auto-refresh to latest while preserving user scroll.
+      renderHome(container, { useCache: false, forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
     });
     const isOffline = !navigator.onLine;
+
+    if (!isOffline) {
+      const now = Date.now();
+      const stalePendingItems = items.filter((item) => {
+        if (!item?.id) return false;
+        if (!item.mediaUploadPending) return false;
+        if (item.syncPending) return false;
+        if (stalePendingHandled.has(item.id)) return false;
+        const updatedAt = getTimestampMillis(item.updated_at) || getTimestampMillis(item.created_at);
+        if (!updatedAt) return false;
+        return (now - updatedAt) > (2 * 60 * 1000);
+      });
+
+      if (stalePendingItems.length > 0) {
+        stalePendingItems.forEach((item) => stalePendingHandled.add(item.id));
+        Promise.allSettled(
+          stalePendingItems.map((item) => updateInventoryItem(item.id, { mediaUploadPending: false }))
+        ).then(() => {
+          if (typeof window.__invalidateHomeCache === 'function') {
+            window.__invalidateHomeCache();
+          }
+          renderHome(container, { useCache: false, forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
+        }).catch(() => {});
+      }
+    }
 
     let userNameMap = {};
     if (window.userProfile?.role === 'admin') {
@@ -269,5 +323,11 @@ export const renderHome = async (container, options = {}) => {
         </div>
       </div>
     `;
+  }
+
+  if (preserveScroll) {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: currentScroll, left: 0, behavior: 'auto' });
+    });
   }
 };
