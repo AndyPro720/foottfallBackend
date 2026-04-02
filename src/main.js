@@ -15,6 +15,7 @@ import { renderLoginPage } from './pages/Login.js';
 import { renderAdminPage } from './pages/Admin.js';
 
 const app = document.getElementById('app');
+let topBarDocClickHandler = null;
 
 // ─── Initialize Service Worker ───
 const updateSW = registerSW({
@@ -53,7 +54,7 @@ function renderTopBar() {
         <a href="#" class="brand-logo" aria-label="Foottfall Home">
           <span class="brand-wordmark">FOOTTFALL</span>
         </a>
-        <div style="display: flex; align-items: center; gap: var(--space-md);">
+        <div class="top-bar-actions">
           <span class="top-bar-tag">Inventory</span>
           ${user ? `
             <div class="user-profile" id="user-profile-trigger">
@@ -67,12 +68,12 @@ function renderTopBar() {
                   <p class="text-caption">${user.email}</p>
                 </div>
                 ${window.userProfile?.role === 'admin' ? `
-                  <a href="#admin" class="btn-secondary" style="display:block; text-align:center; padding: 4px; font-size: 12px; margin-top: 8px; text-decoration:none">Admin Panel</a>
+                  <a href="#admin" class="btn-secondary dropdown-action" style="display:block; text-align:center; text-decoration:none">Admin Panel</a>
                 ` : ''}
-                <button class="btn-primary" id="pwa-install-btn" style="display: ${deferredPrompt ? 'inline-flex' : 'none'}; min-height: 36px; padding: 4px 12px; font-size: 12px; margin-top: 8px; width: 100%;">
+                <button class="btn-primary dropdown-action" id="pwa-install-btn" style="display: ${deferredPrompt ? 'inline-flex' : 'none'};">
                   Install App
                 </button>
-                <button class="btn-secondary" id="btn-logout" style="min-height: 36px; padding: 4px 12px; font-size: 12px; margin-top: 8px; width: 100%;">
+                <button class="btn-secondary dropdown-action" id="btn-logout">
                   Sign Out
                 </button>
               </div>
@@ -118,20 +119,24 @@ function attachTopBarListeners() {
   const profileTrigger = document.getElementById('user-profile-trigger');
   const dropdown = document.getElementById('user-dropdown');
   if (profileTrigger && dropdown) {
-    profileTrigger.addEventListener('click', (e) => {
+    profileTrigger.onclick = (e) => {
       e.stopPropagation();
       dropdown.classList.toggle('show');
-    });
+    };
 
-    // Close dropdown when clicking outside
-    document.addEventListener('click', () => {
-      dropdown.classList.remove('show');
-    });
-
-    // Prevent clicks inside dropdown from closing it
-    dropdown.addEventListener('click', (e) => {
+    dropdown.onclick = (e) => {
       e.stopPropagation();
-    });
+    };
+
+    // Replace old handler to avoid stacking duplicate listeners on rerenders
+    if (topBarDocClickHandler) {
+      document.removeEventListener('click', topBarDocClickHandler);
+    }
+
+    topBarDocClickHandler = () => {
+      dropdown.classList.remove('show');
+    };
+    document.addEventListener('click', topBarDocClickHandler);
   }
 }
 
@@ -187,6 +192,8 @@ function renderSkeleton() {
 // ─── Router ───
 const router = async () => {
   const hash = window.location.hash || '#';
+  const preserveScroll = sessionStorage.getItem('route-preserve-scroll') === '1';
+  sessionStorage.removeItem('route-preserve-scroll');
 
   // Render shell with skeleton loading
   app.innerHTML = renderSkeleton();
@@ -299,11 +306,19 @@ VITE_FIREBASE_APP_ID=your_app_id</pre>
     `;
   }
 
+  if (!preserveScroll) {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }
+
   // Re-attach top bar listeners after every DOM render
   attachTopBarListeners();
 };
 
 window.addEventListener('hashchange', router);
+
+if ('scrollRestoration' in window.history) {
+  window.history.scrollRestoration = 'manual';
+}
 
 // ─── Auth State & Boot Sequence ───
 // CRITICAL: Firebase's onAuthStateChanged can take SECONDS to fire when offline

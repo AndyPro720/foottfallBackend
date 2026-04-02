@@ -1,6 +1,15 @@
 import { getInventoryItems } from '../backend/inventoryService.js';
 import { getAllUsers } from '../backend/userRoleService.js';
 
+function toFiniteNumber(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatINR(value) {
+  return `₹${Math.round(value).toLocaleString('en-IN')}`;
+}
+
 function getDisplayLocation(item) {
   const tradeArea = String(item.tradeArea || '').trim();
   if (tradeArea) return tradeArea;
@@ -102,11 +111,21 @@ export const renderHome = async (container) => {
 
       const displayLocation = getDisplayLocation(item);
       const mapLink = getMapLink(item);
+      const size = toFiniteNumber(item.size);
+      const perSqft = toFiniteNumber(item.price);
+      const hasSize = size !== null && size > 0;
+      const hasPerSqft = perSqft !== null && perSqft > 0;
+      const totalRent = hasSize && hasPerSqft ? size * perSqft : null;
+      const sizeLabel = hasSize ? `${size} sqft` : 'Size N/A';
+      const floorText = String(item.floor || '').trim();
+      const floorLabel = floorText ? `Floor ${floorText}` : 'Floor N/A';
+      const rateLabel = hasPerSqft ? `${formatINR(perSqft)}/sqft` : 'Rate N/A';
+      const footerMeta = [sizeLabel, floorLabel, rateLabel].join(' · ');
 
       return `
-        <a href="#property/${item.id}" class="card card-interactive animate-enter" style="--delay:${(i + 1) * 60}ms; text-decoration: none; display: block; color: inherit;">
+        <a href="#property/${item.id}" class="card card-interactive animate-enter property-card-link" style="--delay:${(i + 1) * 60}ms; text-decoration: none; display: block; color: inherit;">
           <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
-            <div class="card-thumbnail-wrapper">
+            <div class="card-thumbnail-wrapper property-card-thumbnail">
               ${firstThumb ? `
                 <img src="${firstThumb}" class="card-thumbnail" alt="${item.name}" loading="lazy" />
               ` : `
@@ -120,7 +139,8 @@ export const renderHome = async (container) => {
               <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 8px;">
                 <h3 class="text-subheading">${item.name || 'Unnamed Property'}</h3>
                 <div style="display:flex; flex-direction:column; align-items:flex-end; gap: var(--space-xs);">
-                  ${item.price ? `<span class="badge">₹${Number(item.price).toLocaleString('en-IN')}</span>` : ''}
+                  ${totalRent ? `<span class="badge badge-rent">${formatINR(totalRent)}</span>` : ''}
+                  ${!totalRent && hasPerSqft ? `<span class="badge">${formatINR(perSqft)}/sqft</span>` : ''}
                   ${item.syncPending ? `<span class="badge badge-sync">Sync Pending</span>` : ''}
                 </div>
               </div>
@@ -132,7 +152,7 @@ export const renderHome = async (container) => {
           </div>
           <div class="card-footer" style="display:flex;align-items:center;gap:var(--space-sm)">
             <span class="status-dot status-active"></span>
-            <span class="text-caption">${item.buildingType || 'Property'} · ${item.size ? item.size + ' sqft' : 'Size N/A'}</span>
+            <span class="text-caption">${footerMeta}</span>
             ${window.userProfile?.role === 'admin' ? `
               <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail?.split('@')[0] || userNameMap[item.createdBy] || 'Unknown Agent'}</span>
             ` : ''}
@@ -151,7 +171,7 @@ export const renderHome = async (container) => {
               ${isOffline ? '<span class="badge" style="background:var(--destructive-dim); color:white; border:none; font-size:10px">Offline: Cached</span>' : ''}
             </div>
           </div>
-          <button class="btn-secondary" id="export-trigger" style="width:auto; padding: 8px 16px; min-height:0; display:flex; gap: 8px; font-size: 13px;">
+          <button class="btn-secondary dashboard-export-btn" id="export-trigger">
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
             Export to Website
           </button>
@@ -170,6 +190,13 @@ export const renderHome = async (container) => {
         event.preventDefault();
         event.stopPropagation();
         window.open(mapLink, '_blank', 'noopener');
+      });
+    });
+
+    container.querySelectorAll('.property-card-link').forEach((cardEl) => {
+      cardEl.addEventListener('click', (event) => {
+        const clickedThumb = Boolean(event.target.closest('.property-card-thumbnail'));
+        sessionStorage.setItem('route-preserve-scroll', clickedThumb ? '1' : '0');
       });
     });
 
