@@ -1,5 +1,6 @@
 import { createInventoryItem, updateInventoryItem } from '../backend/inventoryService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
+import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
 import { SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
@@ -576,8 +577,9 @@ export const renderIntakeForm = (container) => {
       if (fileFields.length > 0) {
         const runBackgroundUpload = async () => {
           if (!navigator.onLine) {
-            showToast('Property saved. Media upload will continue when internet is back.', 'warning');
+            addUploadLog('⏸ Offline — upload paused until reconnect', 'pending');
             window.addEventListener('online', () => {
+              addUploadLog('🌐 Back online — resuming uploads');
               runBackgroundUpload().catch((retryErr) => {
                 console.error('Background media upload retry failed:', retryErr);
               });
@@ -585,52 +587,72 @@ export const renderIntakeForm = (container) => {
             return;
           }
 
-          let hadUploadFailure = false;
-          await Promise.all(
-            fileFields.map(async (field) => {
-              if (!Array.isArray(field.files) || field.files.length === 0) {
-                hadUploadFailure = true;
-                console.warn(`No files available in background snapshot for ${field.name}`);
-                return;
-              }
+          // Collect all files for the tracker panel
+          const allFiles = fileFields.flatMap(f => Array.from(f.files || []));
+          const session = createUploadSession('Property Media', allFiles);
 
-              const path = `properties/${docId}/${field.name}`;
-              try {
-                const urls = await uploadMultipleFiles(field.files, path);
-                if (urls.length > 0) {
-                  const updateData = {};
-                  if (field.isFacility) {
-                    updateData[`${field.name}Photo`] = urls[0];
-                  } else {
-                    updateData[`images.${field.name}`] = urls;
-                  }
-                  await updateInventoryItemWithRetry(docId, updateData);
+          let hadUploadFailure = false;
+          let fileOffset = 0;
+
+          for (const field of fileFields) {
+            if (!Array.isArray(field.files) || field.files.length === 0) {
+              hadUploadFailure = true;
+              addUploadLog(`⚠ No files for ${field.name}`, 'error');
+              continue;
+            }
+
+            const currentOffset = fileOffset;
+            const path = `properties/${docId}/${field.name}`;
+            try {
+              const urls = await uploadMultipleFiles(field.files, path, null, (idx, pct, status, error) => {
+                const globalIdx = currentOffset + idx;
+                if (status === 'converting') session.markConverting(globalIdx);
+                else if (status === 'error') session.markError(globalIdx, error);
+                else if (status === 'done') session.markDone(globalIdx);
+                else session.updateProgress(globalIdx, pct);
+              });
+
+              if (urls.length > 0) {
+                const updateData = {};
+                if (field.isFacility) {
+                  updateData[`${field.name}Photo`] = urls[0];
                 } else {
-                  hadUploadFailure = true;
+                  updateData[`images.${field.name}`] = urls;
                 }
-              } catch (uploadErr) {
+                addUploadLog(`Saving ${field.name} to database...`);
+                await updateInventoryItemWithRetry(docId, updateData);
+              } else {
                 hadUploadFailure = true;
-                console.error(`Upload failed for ${field.name}:`, uploadErr);
               }
-            })
-          );
+            } catch (uploadErr) {
+              hadUploadFailure = true;
+              // Mark remaining files in this field as errored
+              for (let i = 0; i < field.files.length; i++) {
+                session.markError(currentOffset + i, uploadErr.message || 'Upload failed');
+              }
+              console.error(`Upload failed for ${field.name}:`, uploadErr);
+            }
+            fileOffset += field.files.length;
+          }
 
           await updateInventoryItemWithRetry(docId, { mediaUploadPending: hadUploadFailure });
           if (typeof window.__invalidateHomeCache === 'function') {
             window.__invalidateHomeCache();
           }
 
+          const { done, errors } = session.summary;
           if (hadUploadFailure) {
-            showToast('Property created. Some media failed to sync.', 'error');
+            addUploadLog(`⚠ ${done} uploaded, ${errors} failed`, 'error');
           } else {
-            showToast('Property media synced in background.', 'success');
+            addUploadLog(`✓ All ${done} files synced`, 'done');
           }
         };
 
-        showToast('Property saved. You can continue adding more while media uploads.', 'info');
+        addUploadLog('Property data saved. Starting media upload...');
         window.location.hash = '#';
         setTimeout(() => {
           runBackgroundUpload().catch((bgErr) => {
+            addUploadLog(`✗ Upload crashed: ${bgErr.message}`, 'error');
             console.error('Background media upload failed:', bgErr);
           });
         }, 0);

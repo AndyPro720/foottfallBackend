@@ -73,7 +73,7 @@ export async function deleteFile(path) {
  * @param {Function} [onProgress] Optional callback for tracking aggregate progress (0-100).
  * @returns {Promise<string[]>} Array of public download URLs for the successfully uploaded files.
  */
-export async function uploadMultipleFiles(files, basePath, onProgress = null) {
+export async function uploadMultipleFiles(files, basePath, onProgress = null, onFileProgress = null) {
   const fileArray = Array.from(files);
   if (fileArray.length === 0) return [];
 
@@ -82,12 +82,13 @@ export async function uploadMultipleFiles(files, basePath, onProgress = null) {
   const urls = [];
 
   const uploadPromises = fileArray.map(async (file, index) => {
-    // ─── Phase 9: HEIC Conversion ───
+    // ─── HEIC Conversion ───
     const fileType = String(file.type || '').toLowerCase();
     const isHeic = /\.hei(c|f)$/i.test(file.name || '') || fileType === 'image/heic' || fileType === 'image/heif';
     const isVideo = fileType.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(file.name || '');
-    // Only convert HEIC if it's genuinely an image, never a video
+
     if (isHeic && !isVideo) {
+      if (onFileProgress) onFileProgress(index, 5, 'converting');
       try {
         const converted = await heicTo({ blob: file, type: "image/jpeg", quality: 0.8 });
         const jpegBlob = Array.isArray(converted)
@@ -99,6 +100,7 @@ export async function uploadMultipleFiles(files, basePath, onProgress = null) {
               : new Blob([converted], { type: "image/jpeg" }));
         const outputName = (file.name || `upload_${Date.now()}`).replace(/\.hei(c|f)$/i, '.jpg');
         file = new File([jpegBlob], outputName, { type: "image/jpeg" });
+        if (onFileProgress) onFileProgress(index, 15, 'uploading');
       } catch (err) {
         console.error("HEIC conversion failed, attempting raw upload:", err);
       }
@@ -106,15 +108,10 @@ export async function uploadMultipleFiles(files, basePath, onProgress = null) {
 
     const filePath = `${basePath}/${Date.now()}_${index}_${file.name}`;
     return uploadFile(file, filePath, (p) => {
-
-      // Aggregate progress calculation: 
-      // (sum of individual file progress / total files)
-      // This is a simplified approximation as files may have different sizes.
-      if (onProgress) {
-        // Since we don't have individual file weights, we'll just track completion
-      }
+      if (onFileProgress) onFileProgress(index, Math.round(p), 'uploading');
     }).then(url => {
         totalUploaded++;
+        if (onFileProgress) onFileProgress(index, 100, 'done');
         if (onProgress) onProgress((totalUploaded / totalFiles) * 100);
         return url;
     });
@@ -122,13 +119,15 @@ export async function uploadMultipleFiles(files, basePath, onProgress = null) {
 
   const results = await Promise.allSettled(uploadPromises);
   
-  results.forEach(result => {
+  results.forEach((result, i) => {
     if (result.status === 'fulfilled') {
       urls.push(result.value);
     } else {
       console.warn('Batch upload partial failure:', result.reason);
+      if (onFileProgress) onFileProgress(i, 0, 'error', String(result.reason?.message || result.reason));
     }
   });
+
 
   return urls;
 }

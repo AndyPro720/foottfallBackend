@@ -1798,3 +1798,147 @@ body.ios-pwa #app {
   color: var(--text-tertiary);
   font-size: 12px;
 }
+
+/* ========== UPLOAD TRACKER (Persistent Panel) ========== */
+
+.upload-tracker {
+  position: fixed;
+  bottom: calc(var(--bottom-nav-base-height) + env(safe-area-inset-bottom, 0px) + 8px);
+  right: 8px;
+  left: 8px;
+  max-width: 400px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  font-size: 12px;
+  animation: fadeUp 0.3s ease;
+}
+
+@media (min-width: 500px) {
+  .upload-tracker {
+    left: auto;
+    right: 16px;
+    bottom: 16px;
+    max-width: 360px;
+  }
+}
+
+.upload-tracker-header {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(52, 211, 153, 0.08);
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 12px;
+  user-select: none;
+}
+
+.upload-tracker-header.error {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.upload-tracker-header.done {
+  background: rgba(52, 211, 153, 0.12);
+}
+
+.upload-tracker-toggle,
+.upload-tracker-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.upload-tracker-body {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px 0;
+  scrollbar-width: thin;
+}
+
+.upload-tracker-item {
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.upload-tracker-item:last-child {
+  border-bottom: none;
+}
+
+.upload-tracker-item-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.upload-tracker-icon {
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.item-done .upload-tracker-icon { color: var(--accent-green); }
+.item-error .upload-tracker-icon { color: var(--destructive); }
+.item-active .upload-tracker-icon { color: var(--text-secondary); }
+
+.upload-tracker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.upload-tracker-pct {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  min-width: 36px;
+  text-align: right;
+}
+
+.item-done .upload-tracker-pct { color: var(--accent-green); }
+.item-error .upload-tracker-pct { color: var(--destructive); }
+
+.upload-tracker-bar-bg {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.upload-tracker-bar {
+  height: 100%;
+  background: var(--accent-green);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.item-error .upload-tracker-bar {
+  background: var(--destructive);
+}
+
+.upload-tracker-error {
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--destructive);
+  word-break: break-word;
+}
+
