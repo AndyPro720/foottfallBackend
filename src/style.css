@@ -1944,142 +1944,171 @@ body.ios-pwa #app {
 
 /* ========== MULTI SELECT STYLES ========== */
 
+/* ── Selection Action Bar (bottom sheet) ── */
 .selection-action-bar {
   position: fixed;
-  bottom: calc(var(--bottom-nav-base-height) + env(safe-area-inset-bottom, 0px) + 16px);
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: calc(var(--bottom-nav-base-height) + env(safe-area-inset-bottom, 0px) + 12px);
+  left: 16px;
+  right: 16px;
   z-index: 2000;
-  display: flex;
-  gap: 12px;
-  padding: 12px 16px;
   background: var(--bg-raised);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-full);
-  box-shadow: 0 12px 40px rgba(0,0,0,0.8);
-  animation: fadeUp 0.3s ease;
-  align-items: center;
-  min-width: 320px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  padding: 14px 16px;
+  animation: fadeUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sab-top {
+  display: flex;
   justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
-.selection-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-primary);
-  font-weight: 600;
+.sab-count {
   font-size: 14px;
-}
-
-.selection-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.selection-actions button {
-  background: rgba(255,255,255,0.05);
-  border: none;
   color: var(--text-secondary);
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
+}
+.sab-count strong {
+  color: var(--accent-green);
+  font-size: 16px;
 }
 
-.selection-actions button:hover {
-  background: rgba(255,255,255,0.1);
+.sab-close {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+}
+.sab-close:hover { color: var(--text-primary); background: rgba(255,255,255,0.06); }
+
+.sab-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.sab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sab-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
   color: var(--text-primary);
 }
-
-.selection-actions button.action-delete:hover {
-  background: rgba(239, 68, 68, 0.15);
+.sab-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.sab-btn-danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.12);
   color: var(--destructive);
 }
 
-.card-selection-indicator {
+/* ── Check Circle on Cards ── */
+.card-check-circle {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  width: 24px;
-  height: 24px;
+  top: 10px;
+  left: 10px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: var(--bg-raised);
-  border: 2px solid var(--border-default);
+  background: rgba(0,0,0,0.5);
+  border: 2px solid rgba(255,255,255,0.5);
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  pointer-events: none;
   color: transparent;
+  pointer-events: none;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
-
-.card-selected {
-  border-color: var(--accent-green) !important;
-  box-shadow: 0 0 0 2px var(--accent-green);
-  background: rgba(52, 211, 153, 0.03);
-}
-
-.card-selected .card-selection-indicator,
-.card-selection-indicator.checked {
+.card-check-circle.checked {
   background: var(--accent-green);
   border-color: var(--accent-green);
   color: #000;
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
-.selection-mode-page .card {
-  cursor: pointer;
-  transform-origin: center;
+/* ── Selected Card ── */
+.card-selected {
+  border-color: var(--accent-green) !important;
+  box-shadow: 0 0 0 2px var(--accent-green), 0 4px 12px rgba(52, 211, 153, 0.15);
 }
 
-.selection-mode-page {
-  padding-bottom: 80px; /* Extra padding for bottom bar */
-}
-
-/* Select button in header */
+/* ── Header Select Buttons ── */
 .header-select-btn {
   background: none;
-  border: none;
+  border: 1px solid var(--border-default);
   color: var(--accent-green);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  padding: 8px 12px;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
   cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.header-select-btn:hover {
+  background: rgba(52, 211, 153, 0.08);
+}
+.header-cancel-btn {
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+}
+.header-cancel-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-primary);
 }
 
-/* Optional mini-menu for batch status */
+/* ── Batch Status Menu Popup ── */
 .batch-status-menu {
   position: absolute;
   bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
+  left: 16px;
+  right: 16px;
   background: var(--bg-raised);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   padding: 4px;
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 2px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  display: none;
-  min-width: 150px;
 }
 .batch-status-menu.visible { display: flex; }
+
 .batch-status-opt {
   background: none;
   border: none;
-  padding: 8px 12px;
+  padding: 10px 14px;
   text-align: left;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
   border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: background 0.15s;
 }
 .batch-status-opt:hover { background: rgba(255,255,255,0.05); }
 

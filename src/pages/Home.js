@@ -1,4 +1,5 @@
 import { getInventoryItems, deleteInventoryItem, updateInventoryItem } from '../backend/inventoryService.js';
+import { SECTIONS } from '../config/propertyFields.js';
 import { getAllUsers } from '../backend/userRoleService.js';
 import {
   applyFilters,
@@ -97,11 +98,9 @@ function buildCardHtml(item, i, userNameMap) {
       : 'status-inactive';
 
   return `
-    <div class="card card-interactive animate-enter property-card-link ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''} ${isSelectionMode ? 'selectable' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative; user-select: none; -webkit-user-select: none;">
-      <div class="card-selection-indicator">
-        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
-      </div>
-      <a href="${isSelectionMode ? '#' : `#property/${item.id}`}" class="card-inner-link" style="text-decoration: none; display: block; color: inherit;">
+    <div class="card card-interactive animate-enter property-card-link ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative; -webkit-user-select: none; user-select: none;">
+      ${isSelectionMode ? `<div class="card-check-circle ${selectedPropertyIds.has(item.id) ? 'checked' : ''}"><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>` : ''}
+      <a href="#property/${item.id}" class="card-inner-link" style="text-decoration: none; display: block; color: inherit;">
         <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
           <div class="card-thumbnail-wrapper property-card-thumbnail">
           ${firstThumb ? `
@@ -147,10 +146,6 @@ function renderSearchBar() {
   const activeCount = countActiveFilters(filterState);
   return `
     <div class="search-bar-container">
-      <div style="display:flex; justify-content:space-between; align-items:center; width: 100%; margin-bottom: 8px;">
-        <span style="font-size: 14px; color: var(--text-secondary);">Inventory</span>
-        <button id="toggle-selection-btn" class="header-select-btn">${isSelectionMode ? (selectedPropertyIds.size > 0 ? 'Deselect All' : 'Cancel') : 'Select'}</button>
-      </div>
       <div class="search-bar">
         <svg class="search-bar-icon" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
         <input type="text" class="search-bar-input" id="home-search-input" placeholder="Search properties..." value="${filterState.searchText}" autocomplete="off" />
@@ -169,37 +164,36 @@ function renderSearchBar() {
 function renderBatchActionBar(filteredItemsCount) {
   if (!isSelectionMode) return '';
   const count = selectedPropertyIds.size;
-  const allSelected = count > 0 && count === filteredItemsCount;
+  const dis = count === 0 ? 'disabled' : '';
 
   return `
-    <div class="selection-action-bar">
-      <div class="selection-info">
-        <span style="color:var(--accent-green)">${count}</span> Selected
+    <div class="selection-action-bar" id="selection-action-bar">
+      <div class="sab-top">
+        <span class="sab-count"><strong>${count}</strong> selected</span>
+        <button class="sab-close" id="sab-exit-btn" title="Exit selection">&times;</button>
       </div>
-      <div class="selection-actions">
-        <button id="btn-select-all" title="${allSelected ? 'Deselect All' : 'Select All'}">
-          ${allSelected 
-            ? `<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`
-            : `<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>`}
+      <div class="sab-actions">
+        <button class="sab-btn" id="btn-batch-status" ${dis} title="Change Status">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+          <span>Status</span>
         </button>
-        <button id="btn-batch-status" title="Change Status" ${count === 0 ? 'disabled style="opacity:0.5"' : ''}>
-          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+        <button class="sab-btn" id="btn-batch-copy" ${dis} title="Copy Summary">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          <span>Copy</span>
         </button>
-        <button id="btn-batch-copy" title="Copy Summary" ${count === 0 ? 'disabled style="opacity:0.5"' : ''}>
-          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+        <button class="sab-btn" id="btn-batch-share" ${dis} title="Share">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+          <span>Share</span>
         </button>
-        <button id="btn-batch-share" title="Share" ${count === 0 ? 'disabled style="opacity:0.5"' : ''}>
-          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
-        </button>
-        <button id="btn-batch-delete" class="action-delete" title="Delete Selected" ${count === 0 ? 'disabled style="opacity:0.5"' : ''}>
-          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        <button class="sab-btn sab-btn-danger" id="btn-batch-delete" ${dis} title="Delete">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          <span>Delete</span>
         </button>
       </div>
-
       <div class="batch-status-menu" id="batch-status-menu">
-        <button class="batch-status-opt" data-status="active">Set Active</button>
-        <button class="batch-status-opt" data-status="pending">Set Pending</button>
-        <button class="batch-status-opt" data-status="inactive">Set Inactive</button>
+        <button class="batch-status-opt" data-status="active"><span class="status-dot status-active"></span> Active</button>
+        <button class="batch-status-opt" data-status="pending"><span class="status-dot status-pending"></span> Pending</button>
+        <button class="batch-status-opt" data-status="inactive"><span class="status-dot status-inactive"></span> Inactive</button>
       </div>
     </div>
   `;
@@ -363,310 +357,149 @@ function renderAdvancedFilterPanel(facets) {
 let debounceTimer = null;
 
 function attachHomeInteractions(container, renderFn) {
-  // Toggle Selection Mode via Header Button
+
+  // ─── Exit selection helper ───
+  function exitSelectionMode() {
+    isSelectionMode = false;
+    selectedPropertyIds.clear();
+    renderFn();
+  }
+
+  // ─── Smooth DOM-only update (no full re-render) ───
+  function syncCardUI() {
+    const listEl = document.getElementById('property-list');
+    if (!listEl) return;
+    listEl.querySelectorAll('.property-card-link').forEach(el => {
+      const id = el.dataset.propertyId;
+      const selected = selectedPropertyIds.has(id);
+      el.classList.toggle('card-selected', selected);
+      const chk = el.querySelector('.card-check-circle');
+      if (chk) chk.classList.toggle('checked', selected);
+    });
+    // Update counter text
+    const cnt = document.querySelector('.sab-count');
+    if (cnt) cnt.innerHTML = `<strong>${selectedPropertyIds.size}</strong> selected`;
+    // Enable/disable action buttons
+    document.querySelectorAll('.sab-btn').forEach(btn => {
+      btn.disabled = selectedPropertyIds.size === 0;
+    });
+  }
+
+  // ─── Header Select button: enters selection mode ───
   const toggleBtn = document.getElementById('toggle-selection-btn');
   if (toggleBtn) {
     toggleBtn.onclick = () => {
-      // If we are currently in selection mode, exit it
-      // Else, we enter selection mode AND select all. (As requested by user: "select button can instead act as select all")
       if (isSelectionMode) {
-        isSelectionMode = false;
-        selectedPropertyIds.clear();
+        exitSelectionMode();
       } else {
         isSelectionMode = true;
-        const listEl = document.getElementById('property-list');
-        const cards = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')) : [];
-        const allIds = cards.map(c => c.dataset.propertyId);
-        allIds.forEach(id => selectedPropertyIds.add(id));
+        renderFn();
       }
-      renderFn(); 
     };
   }
 
-  // Helper to dynamically update bottom action bar statuses
-  const updateActionBarState = () => {
-    const listEl = document.getElementById('property-list');
-    const cards = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')) : [];
-    const allSelected = selectedPropertyIds.size > 0 && selectedPropertyIds.size === cards.length;
-    
-    // Update Header
-    if (toggleBtn) {
-      toggleBtn.textContent = isSelectionMode ? (selectedPropertyIds.size > 0 ? 'Deselect All' : 'Cancel') : 'Select';
-    }
+  // ─── Exit button inside action bar ───
+  const sabExitBtn = document.getElementById('sab-exit-btn');
+  if (sabExitBtn) sabExitBtn.onclick = exitSelectionMode;
 
-    // Update Bottom Bar info
-    const countSpan = document.querySelector('.selection-info span');
-    if (countSpan) countSpan.textContent = selectedPropertyIds.size;
-    
-    // Update Select All icon
-    const btnSelectAll = document.getElementById('btn-select-all');
-    if (btnSelectAll) {
-      btnSelectAll.innerHTML = allSelected 
-        ? `<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`
-        : `<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>`;
-      btnSelectAll.title = allSelected ? 'Deselect All' : 'Select All';
-    }
-    
-    // Disable/Enable action buttons
-    ['btn-batch-status', 'btn-batch-copy', 'btn-batch-share', 'btn-batch-delete'].forEach(btnId => {
-       const btn = document.getElementById(btnId);
-       if (btn) {
-          if (selectedPropertyIds.size === 0) {
-             btn.disabled = true;
-             btn.style.opacity = '0.5';
-          } else {
-             btn.disabled = false;
-             btn.style.opacity = '1';
-          }
-       }
-    });
-
-    if (selectedPropertyIds.size === 0 && isSelectionMode) {
-      // Auto exit selection mode if all deselected manually
-      isSelectionMode = false;
-      renderFn();
-    }
-  };
-
-  // Card Clicks (Selection vs Navigation) & Long Press
-  container.querySelectorAll('.property-card-link').forEach(el => {
-    let pressTimer = null;
-    let isDragging = false;
-
-    // Prevent trigger if they scroll
-    el.addEventListener('pointermove', () => isDragging = true);
-    
-    el.addEventListener('pointerdown', (e) => {
-      if (isSelectionMode) return; // Ignore hold if already in selection mode
-      isDragging = false;
-      pressTimer = setTimeout(() => {
-        if (isDragging) return;
-        isSelectionMode = true;
-        const id = el.dataset.propertyId;
-        selectedPropertyIds.add(id);
-        
-        // Use Haptic feedback if available for "intuitive hold"
-        if (navigator.vibrate) navigator.vibrate(50);
-        
-        renderFn();
-      }, 450); // 450ms long press
-    });
-    
-    const cancelPress = () => clearTimeout(pressTimer);
-    el.addEventListener('pointerup', cancelPress);
-    el.addEventListener('pointerleave', cancelPress);
-    el.addEventListener('pointercancel', cancelPress);
-
-    el.addEventListener('click', (e) => {
-      cancelPress();
-      if (isSelectionMode) {
-        e.preventDefault();
-        const id = el.dataset.propertyId;
-        
-        // Toggle Local State
-        if (selectedPropertyIds.has(id)) selectedPropertyIds.delete(id);
-        else selectedPropertyIds.add(id);
-
-        // Smooth DOM Toggle (preventing full render stutter)
-        if (selectedPropertyIds.has(id)) el.classList.add('card-selected');
-        else el.classList.remove('card-selected');
-
-        const indicator = el.querySelector('.card-selection-indicator');
-        if (indicator) {
-          if (selectedPropertyIds.has(id)) indicator.classList.add('checked');
-          else indicator.classList.remove('checked');
-        }
-
-        updateActionBarState();
-      } else {
-        sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
-      }
-    });
-  });
-
-  // Batch Actions Toolbar
-  const btnSelectAll = document.getElementById('btn-select-all');
-  if (btnSelectAll) {
-    btnSelectAll.onclick = () => {
+  // ─── Select All / Deselect All in header (when in selection mode) ───
+  const selectAllBtn = document.getElementById('sab-toggle-all-btn');
+  if (selectAllBtn) {
+    selectAllBtn.onclick = () => {
       const listEl = document.getElementById('property-list');
-      const cards = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')) : [];
-      const allIds = cards.map(c => c.dataset.propertyId);
-      
+      const allIds = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')).map(c => c.dataset.propertyId) : [];
       const allSelected = allIds.length > 0 && selectedPropertyIds.size === allIds.length;
-      
       if (allSelected) {
         selectedPropertyIds.clear();
       } else {
         allIds.forEach(id => selectedPropertyIds.add(id));
       }
-      
-      // Update DOM gracefully instead of reloading entire list
-      cards.forEach(el => {
-        const id = el.dataset.propertyId;
-        if (selectedPropertyIds.has(id)) el.classList.add('card-selected');
-        else el.classList.remove('card-selected');
-        
-        const indicator = el.querySelector('.card-selection-indicator');
-        if (indicator) {
-          if (selectedPropertyIds.has(id)) indicator.classList.add('checked');
-          else indicator.classList.remove('checked');
-        }
-      });
-      
-      updateActionBarState();
+      syncCardUI();
+      // Update the toggle label
+      const newAllSelected = allIds.length > 0 && selectedPropertyIds.size === allIds.length;
+      selectAllBtn.textContent = newAllSelected ? 'Deselect All' : 'Select All';
     };
   }
 
-  // Batch Status
-  const btnStatus = document.getElementById('btn-batch-status');
-  if (btnStatus) {
-    btnStatus.onclick = (e) => {
-      e.stopPropagation();
-      document.getElementById('batch-status-menu')?.classList.toggle('visible');
-    };
-  }
-  
-  // Close batch status menu when clicking outside
-  document.addEventListener('click', (e) => {
-    const menu = document.getElementById('batch-status-menu');
-    if (menu && menu.classList.contains('visible') && !e.target.closest('.selection-action-bar')) {
-      menu.classList.remove('visible');
+  // ─── Card interaction: long-press to enter + tap to toggle ───
+  container.querySelectorAll('.property-card-link').forEach(el => {
+    let pressTimer = null;
+    let longPressFired = false;
+    let startX = 0, startY = 0;
+
+    el.addEventListener('touchstart', (e) => {
+      if (isSelectionMode) return;
+      longPressFired = false;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      pressTimer = setTimeout(() => {
+        longPressFired = true;
+        isSelectionMode = true;
+        selectedPropertyIds.add(el.dataset.propertyId);
+        if (navigator.vibrate) navigator.vibrate(30);
+        renderFn();
+      }, 500);
+    }, { passive: true });
+
+    el.addEventListener('touchmove', (e) => {
+      if (!pressTimer) return;
+      const touch = e.touches[0];
+      if (Math.abs(touch.clientX - startX) > 10 || Math.abs(touch.clientY - startY) > 10) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
+    }, { passive: true });
+
+    el.addEventListener('touchend', () => {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    });
+    el.addEventListener('touchcancel', () => {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    });
+
+    // Click handler
+    el.addEventListener('click', (e) => {
+      if (longPressFired) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        longPressFired = false;
+        return;
+      }
+      if (isSelectionMode) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const id = el.dataset.propertyId;
+        if (selectedPropertyIds.has(id)) selectedPropertyIds.delete(id);
+        else selectedPropertyIds.add(id);
+        syncCardUI();
+        // Update Select All text
+        const listEl = document.getElementById('property-list');
+        const allIds = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')).map(c => c.dataset.propertyId) : [];
+        const saBtn = document.getElementById('sab-toggle-all-btn');
+        if (saBtn) saBtn.textContent = (allIds.length > 0 && selectedPropertyIds.size === allIds.length) ? 'Deselect All' : 'Select All';
+        // Auto-exit if none selected
+        if (selectedPropertyIds.size === 0) exitSelectionMode();
+      } else {
+        sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
+      }
+    });
+    
+    // Block link navigation inside cards during selection mode (captures the <a> click)
+    const innerLink = el.querySelector('.card-inner-link');
+    if (innerLink) {
+      innerLink.addEventListener('click', (e) => {
+        if (isSelectionMode) { e.preventDefault(); e.stopImmediatePropagation(); }
+      });
     }
   });
 
-  document.querySelectorAll('.batch-status-opt').forEach(btn => {
-    btn.onclick = async (e) => {
-      const status = e.target.dataset.status;
-      if (selectedPropertyIds.size === 0) return;
-      const ids = Array.from(selectedPropertyIds);
-      
-      import('../utils/ui.js').then(async ({ showToast }) => {
-        showToast(`Updating status for ${ids.length} properties...`, 'info');
-        isSelectionMode = false;
-        selectedPropertyIds.clear();
-        renderFn();
-        
-        try {
-          await Promise.all(ids.map(id => updateInventoryItem(id, { status })));
-          showToast(`Updated ${ids.length} properties.`, 'success');
-          // Re-fetch everything gracefully
-          const { getInventoryItems } = await import('../backend/inventoryService.js');
-          getInventoryItems({}, cachedItems => { 
-            window.__invalidateHomeCache?.(); 
-            // the callback re-renders
-          });
-        } catch (err) {
-          showToast('Failed to update status: ' + err.message, 'error');
-        }
-      });
-    };
-  });
-
-  // Batch Delete
-  const btnDelete = document.getElementById('btn-batch-delete');
-  if (btnDelete) {
-    btnDelete.onclick = async () => {
-      if (selectedPropertyIds.size === 0) return;
-      
-      // Validation check
-      const ids = Array.from(selectedPropertyIds);
-      const role = window.userProfile?.role;
-      const uid = window.userProfile?.uid;
-      const isAdmin = role === 'admin';
-      
-      const itemsToDelete = cachedItems.filter(i => selectedPropertyIds.has(i.id));
-      const unauthorized = itemsToDelete.filter(i => i.createdBy !== uid && !isAdmin);
-      
-      if (unauthorized.length > 0) {
-        import('../utils/ui.js').then(({ showToast }) => showToast(`You do not have permission to delete ${unauthorized.length} of the selected properties.`, 'error'));
-        return;
-      }
-
-      if (!confirm(`Are you sure you want to permanently delete ${ids.length} properties?`)) return;
-
-      import('../utils/ui.js').then(async ({ showToast }) => {
-        showToast(`Deleting ${ids.length} properties...`, 'info');
-        isSelectionMode = false;
-        selectedPropertyIds.clear();
-        
-        // Optimistic update
-        cachedItems = cachedItems.filter(i => !ids.includes(i.id));
-        renderFn();
-
-        try {
-          await Promise.all(ids.map(id => deleteInventoryItem(id)));
-          showToast(`Deleted ${ids.length} properties.`, 'success');
-        } catch (err) {
-          showToast('Failed to delete: ' + err.message, 'error');
-        }
-      });
-    };
-  }
-
-  function formatPropertyForCopy(item) {
-    const size = item.size ? `${item.size} sqft` : '';
-    const rent = item.price ? `₹${item.price.toLocaleString('en-IN')}/sqft` : '';
-    const status = (item.status || 'active').toUpperCase();
-    const loc = String(item.location || 'No location').trim();
-    const link = `${window.location.origin}/#property/${item.id}`;
-    const extras = [size, rent].filter(Boolean).join(' • ');
-    return `📋 *${item.name || 'Unnamed Property'}*\n📍 ${loc}\n📊 Status: ${status}${extras ? `\n📐 ${extras}` : ''}\n🔗 ${link}`;
-  }
-
-  const btnCopy = document.getElementById('btn-batch-copy');
-  if (btnCopy) {
-    btnCopy.onclick = async () => {
-      if (selectedPropertyIds.size === 0) return;
-      const selectedItems = cachedItems.filter(i => selectedPropertyIds.has(i.id));
-      const text = selectedItems.map(formatPropertyForCopy).join('\n\n---\n\n');
-      import('../utils/ui.js').then(async ({ showToast }) => {
-        try {
-          await navigator.clipboard.writeText(text);
-          showToast(`Copied ${selectedItems.length} properties to clipboard`, 'success');
-          isSelectionMode = false;
-          selectedPropertyIds.clear();
-          renderFn();
-        } catch (err) {
-          showToast('Failed to copy', 'error');
-        }
-      });
-    };
-  }
-
-  const btnShare = document.getElementById('btn-batch-share');
-  if (btnShare) {
-    btnShare.onclick = async () => {
-      if (selectedPropertyIds.size === 0) return;
-      const selectedItems = cachedItems.filter(i => selectedPropertyIds.has(i.id));
-      const text = selectedItems.map(formatPropertyForCopy).join('\n\n---\n\n');
-      
-      import('../utils/ui.js').then(async ({ showToast }) => {
-        try {
-          if (navigator.share) {
-            await navigator.share({
-              title: `Footfall Properties (${selectedItems.length})`,
-              text: text
-            });
-            isSelectionMode = false;
-            selectedPropertyIds.clear();
-            renderFn();
-          } else {
-            await navigator.clipboard.writeText(text);
-            showToast(`Copied! (Native share not supported)`, 'success');
-            isSelectionMode = false;
-            selectedPropertyIds.clear();
-            renderFn();
-          }
-        } catch (err) {
-          if (err.name !== 'AbortError') showToast('Failed to share', 'error');
-        }
-      });
-    };
-  }
-
-  // Location link clicks
+  // ─── Block location link clicks in selection mode ───
   container.querySelectorAll('.card-location-link').forEach(el => {
     el.addEventListener('click', (event) => {
+      if (isSelectionMode) { event.preventDefault(); event.stopPropagation(); return; }
       const mapLink = el.dataset.mapLink;
       if (!mapLink) return;
       event.preventDefault();
@@ -675,10 +508,139 @@ function attachHomeInteractions(container, renderFn) {
     });
   });
 
-  // Save scroll on card click
+  // ─── Batch Status ───
+  const btnStatus = document.getElementById('btn-batch-status');
+  if (btnStatus) {
+    btnStatus.onclick = (e) => {
+      e.stopPropagation();
+      document.getElementById('batch-status-menu')?.classList.toggle('visible');
+    };
+  }
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('batch-status-menu');
+    if (menu && menu.classList.contains('visible') && !e.target.closest('#selection-action-bar')) {
+      menu.classList.remove('visible');
+    }
+  });
+  document.querySelectorAll('.batch-status-opt').forEach(btn => {
+    btn.onclick = async () => {
+      const status = btn.dataset.status;
+      if (selectedPropertyIds.size === 0) return;
+      const ids = Array.from(selectedPropertyIds);
+      import('../utils/ui.js').then(async ({ showToast }) => {
+        showToast(`Updating ${ids.length} properties…`, 'info');
+        exitSelectionMode();
+        try {
+          await Promise.all(ids.map(id => updateInventoryItem(id, { status })));
+          showToast(`Updated ${ids.length} properties`, 'success');
+          invalidateHomeCache();
+          renderHome(container, { forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
+        } catch (err) {
+          showToast('Update failed: ' + err.message, 'error');
+        }
+      });
+    };
+  });
+
+  // ─── Batch Delete ───
+  const btnDelete = document.getElementById('btn-batch-delete');
+  if (btnDelete) {
+    btnDelete.onclick = async () => {
+      if (selectedPropertyIds.size === 0) return;
+      const ids = Array.from(selectedPropertyIds);
+      const uid = window.userProfile?.uid;
+      const isAdmin = window.userProfile?.role === 'admin';
+      const unauthorized = cachedItems.filter(i => selectedPropertyIds.has(i.id) && i.createdBy !== uid && !isAdmin);
+      if (unauthorized.length > 0) {
+        import('../utils/ui.js').then(({ showToast }) => showToast(`No permission to delete ${unauthorized.length} properties`, 'error'));
+        return;
+      }
+      if (!confirm(`Permanently delete ${ids.length} propert${ids.length === 1 ? 'y' : 'ies'}?`)) return;
+      import('../utils/ui.js').then(async ({ showToast }) => {
+        showToast(`Deleting ${ids.length} properties…`, 'info');
+        cachedItems = cachedItems.filter(i => !ids.includes(i.id));
+        exitSelectionMode();
+        try {
+          await Promise.all(ids.map(id => deleteInventoryItem(id)));
+          showToast(`Deleted ${ids.length} properties`, 'success');
+        } catch (err) {
+          showToast('Delete failed: ' + err.message, 'error');
+        }
+      });
+    };
+  }
+
+  // ─── Copy Summary (real property info from SECTIONS config) ───
+  function buildFullSummary(item) {
+    const propertySection = SECTIONS.find(s => s.id === 'property-info');
+    const specsSection = SECTIONS.find(s => s.id === 'specs');
+    const contactSection = SECTIONS.find(s => s.id === 'contact');
+    const lines = [`▎ ${item.name || 'Unnamed Property'}`];
+    const allSections = [propertySection, specsSection, contactSection].filter(Boolean);
+    allSections.forEach(section => {
+      section.fields.forEach(field => {
+        if (field.type === 'file') return;
+        if (field.name === 'googleMapsLink' || field.name === 'location') return;
+        const raw = item[field.name];
+        if (raw === undefined || raw === null || raw === '') return;
+        let val = raw;
+        if (field.type === 'number') { const n = Number(raw); val = Number.isFinite(n) ? n.toLocaleString('en-IN') : raw; }
+        if (field.type === 'toggle') val = raw === 'yes' ? 'Yes' : 'No';
+        const suffix = field.name === 'size' ? ' sqft' : field.name === 'price' ? '/sqft' : '';
+        lines.push(`  ${field.label}: ${val}${suffix}`);
+      });
+    });
+    // Location
+    const loc = String(item.tradeArea || item.location || '').trim();
+    if (loc) lines.push(`  Location: ${loc}`);
+    lines.push(`  🔗 ${window.location.origin}/#property/${item.id}`);
+    return lines.join('\n');
+  }
+
+  const btnCopy = document.getElementById('btn-batch-copy');
+  if (btnCopy) {
+    btnCopy.onclick = async () => {
+      if (selectedPropertyIds.size === 0) return;
+      const items = cachedItems.filter(i => selectedPropertyIds.has(i.id));
+      const text = items.map(buildFullSummary).join('\n\n━━━━━━━━━━━━━━━━━━━━\n\n');
+      import('../utils/ui.js').then(async ({ showToast }) => {
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast(`Copied ${items.length} propert${items.length === 1 ? 'y' : 'ies'}`, 'success');
+          exitSelectionMode();
+        } catch { showToast('Copy failed', 'error'); }
+      });
+    };
+  }
+
+  // ─── Share ───
+  const btnShare = document.getElementById('btn-batch-share');
+  if (btnShare) {
+    btnShare.onclick = async () => {
+      if (selectedPropertyIds.size === 0) return;
+      const items = cachedItems.filter(i => selectedPropertyIds.has(i.id));
+      const text = items.map(buildFullSummary).join('\n\n━━━━━━━━━━━━━━━━━━━━\n\n');
+      import('../utils/ui.js').then(async ({ showToast }) => {
+        try {
+          if (navigator.share) {
+            await navigator.share({ title: `Footfall Properties (${items.length})`, text });
+            exitSelectionMode();
+          } else {
+            await navigator.clipboard.writeText(text);
+            showToast('Copied (share not supported)', 'success');
+            exitSelectionMode();
+          }
+        } catch (err) {
+          if (err.name !== 'AbortError') showToast('Share failed', 'error');
+        }
+      });
+    };
+  }
+
+  // Save scroll on card click (non-selection mode handled above)
   container.querySelectorAll('.property-card-link').forEach(el => {
     el.addEventListener('click', () => {
-      sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
+      if (!isSelectionMode) sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
     });
   });
 
@@ -1013,10 +975,16 @@ export const renderHome = async (container, options = {}) => {
                   ${isOffline ? '<span class="badge" style="background:var(--destructive-dim); color:white; border:none; font-size:10px">Offline: Cached</span>' : ''}
                 </div>
               </div>
-              <button class="btn-secondary dashboard-export-btn" id="export-trigger">
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                Export
-              </button>
+              <div style="display:flex; align-items:center; gap:8px;">
+                ${isSelectionMode 
+                  ? `<button id="sab-toggle-all-btn" class="header-select-btn">Select All</button>
+                     <button id="toggle-selection-btn" class="header-select-btn header-cancel-btn">Cancel</button>`
+                  : `<button id="toggle-selection-btn" class="header-select-btn">Select</button>`}
+                <button class="btn-secondary dashboard-export-btn" id="export-trigger">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                  Export
+                </button>
+              </div>
             </div>
             ${renderSearchBar()}
             ${renderChipBar({ ...rawFacets, tradeAreas: topTradeAreas })}
