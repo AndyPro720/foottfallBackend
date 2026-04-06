@@ -98,9 +98,9 @@ function buildCardHtml(item, i, userNameMap) {
       : 'status-inactive';
 
   return `
-    <div class="card card-interactive animate-enter property-card-link ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative; -webkit-user-select: none; user-select: none;">
+    <div class="card card-interactive animate-enter property-card-link ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;">
       ${isSelectionMode ? `<div class="card-check-circle ${selectedPropertyIds.has(item.id) ? 'checked' : ''}"><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>` : ''}
-      <a href="#property/${item.id}" class="card-inner-link" style="text-decoration: none; display: block; color: inherit;">
+      <a href="#property/${item.id}" class="card-inner-link ${isSelectionMode ? 'link-disabled' : ''}" style="text-decoration: none; display: block; color: inherit;">
         <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
           <div class="card-thumbnail-wrapper property-card-thumbnail">
           ${firstThumb ? `
@@ -460,7 +460,16 @@ function attachHomeInteractions(container, renderFn) {
       pressTimer = null;
     });
 
-    // Click handler
+    // Suppress browser context menu on long-press
+    el.addEventListener('contextmenu', (e) => {
+      if (longPressFired || isSelectionMode) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
+
+    // Click handler — the <a> is disabled via CSS pointer-events in selection mode,
+    // so clicks bubble directly to this div.
     el.addEventListener('click', (e) => {
       if (longPressFired) {
         e.preventDefault();
@@ -475,25 +484,15 @@ function attachHomeInteractions(container, renderFn) {
         if (selectedPropertyIds.has(id)) selectedPropertyIds.delete(id);
         else selectedPropertyIds.add(id);
         syncCardUI();
-        // Update Select All text
         const listEl = document.getElementById('property-list');
         const allIds = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')).map(c => c.dataset.propertyId) : [];
         const saBtn = document.getElementById('sab-toggle-all-btn');
         if (saBtn) saBtn.textContent = (allIds.length > 0 && selectedPropertyIds.size === allIds.length) ? 'Deselect All' : 'Select All';
-        // Auto-exit if none selected
         if (selectedPropertyIds.size === 0) exitSelectionMode();
       } else {
         sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
       }
     });
-    
-    // Block link navigation inside cards during selection mode (captures the <a> click)
-    const innerLink = el.querySelector('.card-inner-link');
-    if (innerLink) {
-      innerLink.addEventListener('click', (e) => {
-        if (isSelectionMode) { e.preventDefault(); e.stopImmediatePropagation(); }
-      });
-    }
   });
 
   // ─── Block location link clicks in selection mode ───

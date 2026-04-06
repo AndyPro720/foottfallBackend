@@ -2056,27 +2056,38 @@ body.ios-pwa #app {
 
 /* ── Header Select Buttons ── */
 .header-select-btn {
-  background: none;
+  background: rgba(255,255,255,0.04);
   border: 1px solid var(--border-default);
   color: var(--accent-green);
   font-size: 13px;
-  font-weight: 500;
-  padding: 6px 14px;
-  border-radius: var(--radius-full);
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+  line-height: 1;
 }
-.header-select-btn:hover {
-  background: rgba(52, 211, 153, 0.08);
+.header-select-btn:hover,
+.header-select-btn:active {
+  background: rgba(52, 211, 153, 0.1);
+  border-color: var(--accent-green);
 }
 .header-cancel-btn {
   color: var(--text-secondary);
   border-color: var(--border-default);
+  background: rgba(255,255,255,0.03);
 }
-.header-cancel-btn:hover {
-  background: rgba(255,255,255,0.06);
+.header-cancel-btn:hover,
+.header-cancel-btn:active {
+  background: rgba(255,255,255,0.08);
   color: var(--text-primary);
+  border-color: rgba(255,255,255,0.2);
+}
+
+/* ── Disable inner links in selection mode ── */
+.card-inner-link.link-disabled {
+  pointer-events: none;
 }
 
 /* ── Batch Status Menu Popup ── */
