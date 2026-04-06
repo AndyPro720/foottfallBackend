@@ -2001,44 +2001,41 @@ body.ios-pwa #app {
   color: var(--destructive);
 }
 
-.card-selection-overlay {
+.card-selection-indicator {
   position: absolute;
   top: 12px;
   left: 12px;
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: rgba(0,0,0,0.6);
-  border: 2px solid rgba(255,255,255,0.7);
+  background: var(--bg-raised);
+  border: 2px solid var(--border-default);
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   pointer-events: none;
+  color: transparent;
 }
 
 .card-selected {
   border-color: var(--accent-green) !important;
-  box-shadow: 0 0 0 1px var(--accent-green);
+  box-shadow: 0 0 0 2px var(--accent-green);
+  background: rgba(52, 211, 153, 0.03);
 }
 
-.card-selected .card-selection-overlay {
+.card-selected .card-selection-indicator,
+.card-selection-indicator.checked {
   background: var(--accent-green);
   border-color: var(--accent-green);
-}
-
-.card-selected .card-selection-overlay::after {
-  content: '';
-  width: 10px;
-  height: 6px;
-  border-left: 2px solid #000;
-  border-bottom: 2px solid #000;
-  transform: rotate(-45deg) translateY(-1px);
+  color: #000;
+  transform: scale(1.1);
 }
 
 .selection-mode-page .card {
   cursor: pointer;
+  transform-origin: center;
 }
 
 .selection-mode-page {

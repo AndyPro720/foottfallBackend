@@ -97,9 +97,11 @@ function buildCardHtml(item, i, userNameMap) {
       : 'status-inactive';
 
   return `
-    <div class="card card-interactive animate-enter property-card-link ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative;">
-      ${isSelectionMode ? `<div class="card-selection-overlay"></div>` : ''}
-      <a href="${isSelectionMode ? '#' : `#property/${item.id}`}" style="text-decoration: none; display: block; color: inherit;">
+    <div class="card card-interactive animate-enter property-card-link ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''} ${isSelectionMode ? 'selectable' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative; user-select: none; -webkit-user-select: none;">
+      <div class="card-selection-indicator">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+      </div>
+      <a href="${isSelectionMode ? '#' : `#property/${item.id}`}" class="card-inner-link" style="text-decoration: none; display: block; color: inherit;">
         <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
           <div class="card-thumbnail-wrapper property-card-thumbnail">
           ${firstThumb ? `
@@ -147,7 +149,7 @@ function renderSearchBar() {
     <div class="search-bar-container">
       <div style="display:flex; justify-content:space-between; align-items:center; width: 100%; margin-bottom: 8px;">
         <span style="font-size: 14px; color: var(--text-secondary);">Inventory</span>
-        <button id="toggle-selection-btn" class="header-select-btn">${isSelectionMode ? 'Cancel' : 'Select'}</button>
+        <button id="toggle-selection-btn" class="header-select-btn">${isSelectionMode ? (selectedPropertyIds.size > 0 ? 'Deselect All' : 'Cancel') : 'Select'}</button>
       </div>
       <div class="search-bar">
         <svg class="search-bar-icon" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
@@ -195,9 +197,9 @@ function renderBatchActionBar(filteredItemsCount) {
       </div>
 
       <div class="batch-status-menu" id="batch-status-menu">
-        <button class="batch-status-opt" data-status="Occupied">Set Occupied</button>
-        <button class="batch-status-opt" data-status="Available">Set Available</button>
-        <button class="batch-status-opt" data-status="Under Construction">Set Under Construction</button>
+        <button class="batch-status-opt" data-status="active">Set Active</button>
+        <button class="batch-status-opt" data-status="pending">Set Pending</button>
+        <button class="batch-status-opt" data-status="inactive">Set Inactive</button>
       </div>
     </div>
   `;
@@ -361,46 +363,157 @@ function renderAdvancedFilterPanel(facets) {
 let debounceTimer = null;
 
 function attachHomeInteractions(container, renderFn) {
-  // Toggle Selection Mode
+  // Toggle Selection Mode via Header Button
   const toggleBtn = document.getElementById('toggle-selection-btn');
   if (toggleBtn) {
     toggleBtn.onclick = () => {
-      isSelectionMode = !isSelectionMode;
-      if (!isSelectionMode) selectedPropertyIds.clear();
-      renderFn();
+      // If we are currently in selection mode, exit it
+      // Else, we enter selection mode AND select all. (As requested by user: "select button can instead act as select all")
+      if (isSelectionMode) {
+        isSelectionMode = false;
+        selectedPropertyIds.clear();
+      } else {
+        isSelectionMode = true;
+        const listEl = document.getElementById('property-list');
+        const cards = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')) : [];
+        const allIds = cards.map(c => c.dataset.propertyId);
+        allIds.forEach(id => selectedPropertyIds.add(id));
+      }
+      renderFn(); 
     };
   }
 
-  // Card Clicks (Selection vs Navigation)
+  // Helper to dynamically update bottom action bar statuses
+  const updateActionBarState = () => {
+    const listEl = document.getElementById('property-list');
+    const cards = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')) : [];
+    const allSelected = selectedPropertyIds.size > 0 && selectedPropertyIds.size === cards.length;
+    
+    // Update Header
+    if (toggleBtn) {
+      toggleBtn.textContent = isSelectionMode ? (selectedPropertyIds.size > 0 ? 'Deselect All' : 'Cancel') : 'Select';
+    }
+
+    // Update Bottom Bar info
+    const countSpan = document.querySelector('.selection-info span');
+    if (countSpan) countSpan.textContent = selectedPropertyIds.size;
+    
+    // Update Select All icon
+    const btnSelectAll = document.getElementById('btn-select-all');
+    if (btnSelectAll) {
+      btnSelectAll.innerHTML = allSelected 
+        ? `<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`
+        : `<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>`;
+      btnSelectAll.title = allSelected ? 'Deselect All' : 'Select All';
+    }
+    
+    // Disable/Enable action buttons
+    ['btn-batch-status', 'btn-batch-copy', 'btn-batch-share', 'btn-batch-delete'].forEach(btnId => {
+       const btn = document.getElementById(btnId);
+       if (btn) {
+          if (selectedPropertyIds.size === 0) {
+             btn.disabled = true;
+             btn.style.opacity = '0.5';
+          } else {
+             btn.disabled = false;
+             btn.style.opacity = '1';
+          }
+       }
+    });
+
+    if (selectedPropertyIds.size === 0 && isSelectionMode) {
+      // Auto exit selection mode if all deselected manually
+      isSelectionMode = false;
+      renderFn();
+    }
+  };
+
+  // Card Clicks (Selection vs Navigation) & Long Press
   container.querySelectorAll('.property-card-link').forEach(el => {
+    let pressTimer = null;
+    let isDragging = false;
+
+    // Prevent trigger if they scroll
+    el.addEventListener('pointermove', () => isDragging = true);
+    
+    el.addEventListener('pointerdown', (e) => {
+      if (isSelectionMode) return; // Ignore hold if already in selection mode
+      isDragging = false;
+      pressTimer = setTimeout(() => {
+        if (isDragging) return;
+        isSelectionMode = true;
+        const id = el.dataset.propertyId;
+        selectedPropertyIds.add(id);
+        
+        // Use Haptic feedback if available for "intuitive hold"
+        if (navigator.vibrate) navigator.vibrate(50);
+        
+        renderFn();
+      }, 450); // 450ms long press
+    });
+    
+    const cancelPress = () => clearTimeout(pressTimer);
+    el.addEventListener('pointerup', cancelPress);
+    el.addEventListener('pointerleave', cancelPress);
+    el.addEventListener('pointercancel', cancelPress);
+
     el.addEventListener('click', (e) => {
-      const id = el.dataset.propertyId;
+      cancelPress();
       if (isSelectionMode) {
         e.preventDefault();
+        const id = el.dataset.propertyId;
+        
+        // Toggle Local State
         if (selectedPropertyIds.has(id)) selectedPropertyIds.delete(id);
         else selectedPropertyIds.add(id);
-        renderFn();
+
+        // Smooth DOM Toggle (preventing full render stutter)
+        if (selectedPropertyIds.has(id)) el.classList.add('card-selected');
+        else el.classList.remove('card-selected');
+
+        const indicator = el.querySelector('.card-selection-indicator');
+        if (indicator) {
+          if (selectedPropertyIds.has(id)) indicator.classList.add('checked');
+          else indicator.classList.remove('checked');
+        }
+
+        updateActionBarState();
       } else {
         sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
       }
     });
   });
 
-  // Batch Actions
+  // Batch Actions Toolbar
   const btnSelectAll = document.getElementById('btn-select-all');
   if (btnSelectAll) {
     btnSelectAll.onclick = () => {
-      // Find filtered items count from property-list
       const listEl = document.getElementById('property-list');
       const cards = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')) : [];
       const allIds = cards.map(c => c.dataset.propertyId);
       
-      if (allIds.length > 0 && selectedPropertyIds.size === allIds.length) {
+      const allSelected = allIds.length > 0 && selectedPropertyIds.size === allIds.length;
+      
+      if (allSelected) {
         selectedPropertyIds.clear();
       } else {
         allIds.forEach(id => selectedPropertyIds.add(id));
       }
-      renderFn();
+      
+      // Update DOM gracefully instead of reloading entire list
+      cards.forEach(el => {
+        const id = el.dataset.propertyId;
+        if (selectedPropertyIds.has(id)) el.classList.add('card-selected');
+        else el.classList.remove('card-selected');
+        
+        const indicator = el.querySelector('.card-selection-indicator');
+        if (indicator) {
+          if (selectedPropertyIds.has(id)) indicator.classList.add('checked');
+          else indicator.classList.remove('checked');
+        }
+      });
+      
+      updateActionBarState();
     };
   }
 
@@ -490,14 +603,14 @@ function attachHomeInteractions(container, renderFn) {
     };
   }
 
-  // Batch Copy & Share logic
   function formatPropertyForCopy(item) {
-    const size = item.size ? `${item.size} sqft` : 'N/A sqft';
-    const rent = item.price ? `₹${item.price}/sqft` : 'Rent N/A';
-    const status = item.status || 'Active';
+    const size = item.size ? `${item.size} sqft` : '';
+    const rent = item.price ? `₹${item.price.toLocaleString('en-IN')}/sqft` : '';
+    const status = (item.status || 'active').toUpperCase();
     const loc = String(item.location || 'No location').trim();
     const link = `${window.location.origin}/#property/${item.id}`;
-    return `*${item.name || 'Unnamed Property'}* - ${loc}\nSize: ${size} | Rent: ${rent} | Status: ${status}\nLink: ${link}`;
+    const extras = [size, rent].filter(Boolean).join(' • ');
+    return `📋 *${item.name || 'Unnamed Property'}*\n📍 ${loc}\n📊 Status: ${status}${extras ? `\n📐 ${extras}` : ''}\n🔗 ${link}`;
   }
 
   const btnCopy = document.getElementById('btn-batch-copy');
