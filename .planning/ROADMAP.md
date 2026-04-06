@@ -6,8 +6,9 @@
 ## Phases
 
 ### Phase 7: PWA Stability & UI Polish
-**Status**: 🔲 Not Started
+**Status**: ✅ Complete
 **Objective**: Fix critical PWA bugs (iPhone safe areas, offline auth persistence, connectivity banner), remove unnecessary mandatory fields, default sections to collapsed, and deliver a premium UI polish pass.
+
 
 **Requirements**: PWA-01, PWA-02, PWA-03, PWA-04, PWA-05, PWA-06, PWA-07
 
@@ -21,8 +22,9 @@
 ---
 
 ### Phase 8: Enhanced Data Capture
-**Status**: 🔲 Not Started
+**Status**: ✅ Complete
 **Objective**: Add new property data fields (status, mezzanine, clear height, carpet area, outside space, entry photo, OC details), implement auto-calculated Rent, and reorder Unit Specifications.
+
 
 **Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, DATA-07, DATA-08, DATA-09, DATA-10, DATA-11
 
@@ -36,8 +38,9 @@
 ---
 
 ### Phase 9: Multimedia & Location
-**Status**: 🔲 Not Started
+**Status**: ✅ Complete
 **Objective**: Add Instagram-style media slider to detail page, enable video uploads across all media fields, and integrate Google Maps pin placement for location.
+
 
 **Requirements**: MEDIA-01, MEDIA-02, MEDIA-03, MEDIA-04, MEDIA-05
 
@@ -50,8 +53,10 @@
 ---
 
 ### Phase 10: Mobile Search & Filtering
-**Status**: 🔲 Not Started
+**Status**: ✅ Complete
 **Objective**: Add a mobile-friendly search bar, filter controls, and sorting to the Home page property list.
+
+
 
 **Requirements**: SEARCH-01, SEARCH-02, SEARCH-03
 

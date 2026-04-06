@@ -1473,3 +1473,328 @@ body.ios-pwa #app {
     scroll-behavior: auto !important;
   }
 }
+
+/* ========== SEARCH BAR (Phase 10) ========== */
+
+.search-bar-container {
+  margin-top: var(--space-md);
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 0 12px;
+  height: 42px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.search-bar:focus-within {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.15);
+}
+
+.search-bar-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.search-bar-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.search-bar-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.search-bar-clear {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.search-bar-filter-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.search-bar-filter-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.filter-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  background: var(--accent-green);
+  color: var(--bg-base);
+  font-size: 9px;
+  font-weight: 700;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ========== CHIP BAR (Phase 10) ========== */
+
+.chip-bar-container {
+  margin-top: var(--space-sm);
+  position: relative;
+}
+
+.chip-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+
+.chip-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  font-family: inherit;
+}
+
+.chip:hover {
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.chip-active {
+  background: rgba(52, 211, 153, 0.12) !important;
+  border-color: var(--accent-green) !important;
+  color: var(--accent-green) !important;
+}
+
+.chip-sort {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.chip-sm {
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+/* ========== SORT DROPDOWN (Phase 10) ========== */
+
+.sort-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 100;
+  min-width: 180px;
+  padding: 4px;
+  animation: fadeUp 0.15s ease;
+}
+
+.sort-dropdown.show {
+  display: block;
+}
+
+.sort-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.sort-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.sort-option.active {
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+/* ========== ADVANCED FILTER PANEL (Phase 10) ========== */
+
+.filter-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 2000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.filter-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.filter-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 80vh;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border-default);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  z-index: 2001;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.filter-panel.open {
+  transform: translateY(0);
+}
+
+.filter-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.filter-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+}
+
+.filter-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md) var(--space-lg);
+  -webkit-overflow-scrolling: touch;
+}
+
+.filter-section {
+  margin-bottom: var(--space-lg);
+}
+
+.filter-section-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-sm);
+}
+
+.filter-chip-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.filter-chip-group::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-chip-group-wrap {
+  flex-wrap: wrap;
+}
+
+.filter-range-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.filter-range-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px !important;
+  font-size: 13px !important;
+}
+
+.filter-panel-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+  padding-bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border-default);
+  flex-shrink: 0;
+  background: var(--bg-raised);
+}
+
+.filter-result-count {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
