@@ -216,10 +216,15 @@ export const renderHome = async (container, options = {}) => {
       renderHome(container, { useCache: false, forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
     });
     const isOffline = !navigator.onLine;
+    const allItems = Array.isArray(items) ? items : [];
+    const visibleItems = allItems.filter((item) => {
+      const status = String(item.status || 'active').toLowerCase();
+      return status === 'active';
+    });
 
     if (!isOffline) {
       const now = Date.now();
-      const stalePendingItems = items.filter((item) => {
+      const stalePendingItems = visibleItems.filter((item) => {
         if (!item?.id) return false;
         if (!item.mediaUploadPending) return false;
         if (item.syncPending) return false;
@@ -254,7 +259,7 @@ export const renderHome = async (container, options = {}) => {
       }
     }
 
-    if (!items || items.length === 0) {
+    if (!visibleItems || visibleItems.length === 0) {
       container.innerHTML = `
         <div class="page-header animate-enter">
           <h1 class="text-display">Your Properties</h1>
@@ -277,7 +282,7 @@ export const renderHome = async (container, options = {}) => {
       return;
     }
 
-    const cardsHtml = items.map((item, i) => buildCardHtml(item, i, userNameMap)).join('');
+    const cardsHtml = visibleItems.map((item, i) => buildCardHtml(item, i, userNameMap)).join('');
 
     container.innerHTML = `
       <div class="page-header animate-enter">
@@ -285,7 +290,7 @@ export const renderHome = async (container, options = {}) => {
           <div>
             <h1 class="text-display">Your Properties</h1>
             <div style="display:flex; align-items:center; gap:var(--space-sm)">
-              <p class="text-label">${items.length} propert${items.length === 1 ? 'y' : 'ies'} in your portfolio</p>
+              <p class="text-label">${visibleItems.length} propert${visibleItems.length === 1 ? 'y' : 'ies'} in your portfolio</p>
               ${isOffline ? '<span class="badge" style="background:var(--destructive-dim); color:white; border:none; font-size:10px">Offline: Cached</span>' : ''}
             </div>
           </div>

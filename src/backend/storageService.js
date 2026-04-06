@@ -2,7 +2,7 @@ import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebas
 import { storage } from "./firebaseConfig.js";
 import { heicTo } from "heic-to";
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 
 
 /**
@@ -15,7 +15,7 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
  */
 export async function uploadFile(file, path, onProgress = null) {
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`File ${file.name} exceeds the 50MB size limit.`);
+    throw new Error(`File ${file.name} exceeds the 200MB size limit.`);
   }
 
   return new Promise((resolve, reject) => {

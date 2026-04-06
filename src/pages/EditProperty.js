@@ -4,7 +4,7 @@ import { SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
 
 function isLikelyHeicFile(file) {
   const fileType = String(file.type || '').toLowerCase();
@@ -173,7 +173,7 @@ export const renderEditProperty = async (container, id) => {
       </div>
       <div class="form-section-body">
         ${section.fields.map(field => {
-          const val = (section.id === 'photos') ? (item.images?.[field.name] || []) : item[field.name];
+          const val = field.type === 'file' ? (item.images?.[field.name] || []) : item[field.name];
           return renderField(field, val);
         }).join('')}
       </div>
@@ -330,7 +330,7 @@ export const renderEditProperty = async (container, id) => {
       }
 
       if (hasOversized) {
-        showToast('Some files skipped (Max 50MB limit)', 'error');
+        showToast('Some files skipped (Max 200MB limit)', 'error');
       }
 
       if (hasHeicPreviewFailure) {

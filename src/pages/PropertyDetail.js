@@ -77,6 +77,41 @@ function getPriorityLocationLabel(item) {
   return '';
 }
 
+function buildPropertyInformationSummary(item, priorityLocationValue) {
+  const propertySection = SECTIONS.find((section) => section.id === 'property-info');
+  if (!propertySection) {
+    return `${item.name || 'Unnamed Property'}\nLocation Details: ${priorityLocationValue || 'N/A'}`;
+  }
+
+  const lines = [];
+  propertySection.fields.forEach((field) => {
+    if (field.name === 'googleMapsLink' || field.name === 'location') return;
+
+    if (field.type === 'file') {
+      const files = item.images?.[field.name] || [];
+      if (files.length > 0) {
+        lines.push(`${field.label}: ${files.length} file(s)`);
+      }
+      return;
+    }
+
+    const rawValue = item[field.name];
+    if (rawValue === undefined || rawValue === null || rawValue === '') return;
+
+    let value = rawValue;
+    if (field.type === 'number') {
+      const num = Number(rawValue);
+      value = Number.isFinite(num) ? num.toLocaleString('en-IN') : rawValue;
+    }
+
+    const suffix = field.name === 'size' ? ' sqft' : '';
+    lines.push(`${field.label}: ${value}${suffix}`);
+  });
+
+  lines.push(`Location Details: ${priorityLocationValue || 'N/A'}`);
+  return lines.join('\n');
+}
+
 export const renderPropertyDetail = async (container, id) => {
   // Show skeleton while loading
   container.innerHTML = `
@@ -398,9 +433,8 @@ export const renderPropertyDetail = async (container, id) => {
     const copySummaryBtn = document.getElementById('copy-summary-btn');
     if (copySummaryBtn) {
       copySummaryBtn.onclick = async () => {
-        const summaryLocation = priorityLocationValue || 'Location unavailable';
-        const sqft = item.size ? `${item.size} sqft` : 'Size N/A';
-        const summaryText = `${item.name || 'Unnamed Property'}\n${summaryLocation}\n${sqft}`;
+        const summaryBody = buildPropertyInformationSummary(item, priorityLocationValue);
+        const summaryText = `${item.name || 'Unnamed Property'}\n\n${summaryBody}`;
 
         try {
           await navigator.clipboard.writeText(summaryText);

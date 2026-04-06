@@ -15,7 +15,7 @@ export const SECTIONS = [
       { name: 'buildingType', label: 'Building Type', type: 'select', options: ['Mall', 'Standalone', 'High Street'], required: false },
       { name: 'size', label: 'Carpet Area (sq ft)', type: 'number', required: false, placeholder: 'Carpet area' },
       { name: 'floor', label: 'Which Floor', type: 'text', placeholder: 'e.g., Ground, 1st, 2nd' },
-      { name: 'entryToBuilding', label: 'Entry to Building Photo', type: 'file', accept: 'image/*,video/*' },
+      { name: 'entryToBuilding', label: 'Entry to Building Photo', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'googleMapsLink', label: 'Google Map Link', type: 'text', placeholder: 'Paste Google Maps URL' },
       { name: 'location', label: 'Exact Location / Address', type: 'text', required: false, placeholder: 'Full address' },
       { name: 'tradeArea', label: 'Trade Area', type: 'text', placeholder: 'e.g., MG Road, Connaught Place' },
@@ -60,7 +60,7 @@ export const SECTIONS = [
       { name: 'liftAccess', label: 'Lift Access', type: 'toggle', hasPhoto: true },
       { name: 'bohSpace', label: 'BOH Space', type: 'toggle', hasPhoto: true },
       { name: 'fireExit', label: 'Fire Exit', type: 'toggle' },
-      { name: 'ocFile', label: 'OC File Upload', type: 'file', accept: 'image/*,video/*,.pdf' },
+      { name: 'ocFile', label: 'OC File Upload', type: 'file', accept: 'image/*,video/*,.pdf', multiple: true },
     ]
   },
   {
@@ -72,7 +72,7 @@ export const SECTIONS = [
       { name: 'unitFacade', label: 'Unit Facade', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'interior', label: 'Interior', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'signage', label: 'Signage', type: 'file', accept: 'image/*,video/*', multiple: true },
-      { name: 'floorPlan', label: 'Floor Plan', type: 'file', accept: 'image/*,video/*,.pdf' },
+      { name: 'floorPlan', label: 'Floor Plan', type: 'file', accept: 'image/*,video/*,.pdf', multiple: true },
     ]
   }
 ];
