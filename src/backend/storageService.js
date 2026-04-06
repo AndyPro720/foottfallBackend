@@ -85,7 +85,9 @@ export async function uploadMultipleFiles(files, basePath, onProgress = null) {
     // ─── Phase 9: HEIC Conversion ───
     const fileType = String(file.type || '').toLowerCase();
     const isHeic = /\.hei(c|f)$/i.test(file.name || '') || fileType === 'image/heic' || fileType === 'image/heif';
-    if (isHeic) {
+    const isVideo = fileType.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i.test(file.name || '');
+    // Only convert HEIC if it's genuinely an image, never a video
+    if (isHeic && !isVideo) {
       try {
         const converted = await heicTo({ blob: file, type: "image/jpeg", quality: 0.8 });
         const jpegBlob = Array.isArray(converted)

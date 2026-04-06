@@ -19,6 +19,11 @@ export default defineConfig({
             return 'firebase';
           }
 
+          // heic-to is ~2MB+ and only needed on form pages — lazy chunk
+          if (id.includes('node_modules/heic-to') || id.includes('node_modules/libheif')) {
+            return 'heic';
+          }
+
           if (id.includes('node_modules')) {
             return 'vendor';
           }

@@ -5,6 +5,12 @@ import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 
 const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
+const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i;
+
+function isLikelyVideoFile(file) {
+  if (file.type && file.type.startsWith('video/')) return true;
+  return VIDEO_EXTENSIONS.test(file.name || '');
+}
 
 function isLikelyHeicFile(file) {
   const fileType = String(file.type || '').toLowerCase();
@@ -372,7 +378,7 @@ export const renderEditProperty = async (container, id) => {
 
         try {
           let displayUrl = URL.createObjectURL(file);
-          const isVideo = file.type.startsWith('video/');
+          const isVideo = isLikelyVideoFile(file);
           const isHeic = isLikelyHeicFile(file);
 
           if (isHeic) {
@@ -394,7 +400,9 @@ export const renderEditProperty = async (container, id) => {
             vid.className = 'file-preview-thumb';
             vid.src = displayUrl;
             vid.muted = true;
+            vid.playsInline = true;
             vid.onloadedmetadata = () => vid.currentTime = 1;
+            vid.onerror = () => { devDiv.innerHTML = '<div class="badge">🎬 Video</div>'; };
             devDiv.appendChild(vid);
           } else if (file.type.startsWith('image/') || isHeic) {
             const img = document.createElement('img');

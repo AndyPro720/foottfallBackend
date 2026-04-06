@@ -6,13 +6,15 @@ import { syncUserProfile, getCurrentUserProfile } from './backend/userRoleServic
 import { renderConnectivityBanner } from './components/ConnectivityBanner';
 import { showToast } from './utils/ui';
 
-// Statically import core pages so they are immediately available for offline use
+// Static imports: critical-path pages that must load instantly (Home, Login, Detail)
 import { renderHome } from './pages/Home.js';
-import { renderIntakeForm } from './pages/IntakeForm.js';
 import { renderPropertyDetail } from './pages/PropertyDetail.js';
-import { renderEditProperty } from './pages/EditProperty.js';
 import { renderLoginPage } from './pages/Login.js';
-import { renderAdminPage } from './pages/Admin.js';
+
+// Lazy imports: heavy pages that pull in heic-to (~2.7MB). Loaded on-demand.
+const lazyIntakeForm = () => import('./pages/IntakeForm.js').then(m => m.renderIntakeForm);
+const lazyEditProperty = () => import('./pages/EditProperty.js').then(m => m.renderEditProperty);
+const lazyAdminPage = () => import('./pages/Admin.js').then(m => m.renderAdminPage);
 
 const app = document.getElementById('app');
 let topBarDocClickHandler = null;
@@ -284,9 +286,11 @@ const router = async () => {
     if (hash === '#') {
       await renderHome(app, { useCache: true });
     } else if (hash === '#add') {
+      const renderIntakeForm = await lazyIntakeForm();
       renderIntakeForm(app);
     } else if (hash === '#admin') {
       if (window.userProfile?.role === 'admin') {
+        const renderAdminPage = await lazyAdminPage();
         await renderAdminPage(app);
       } else {
         window.location.hash = '#';
@@ -296,6 +300,7 @@ const router = async () => {
       await renderPropertyDetail(app, id);
     } else if (hash.startsWith('#edit/')) {
       const id = hash.split('/')[1];
+      const renderEditProperty = await lazyEditProperty();
       await renderEditProperty(app, id);
     } else {
       app.innerHTML = `
