@@ -1,4 +1,4 @@
-import { getInventoryItems, updateInventoryItem } from '../backend/inventoryService.js';
+import { getInventoryItems, deleteInventoryItem, updateInventoryItem } from '../backend/inventoryService.js';
 import { getAllUsers } from '../backend/userRoleService.js';
 import {
   applyFilters,
@@ -14,6 +14,10 @@ let cachedItems = null;       // Raw data cache (replaces homeCacheHtml)
 let cachedUserNameMap = {};
 let filterState = createEmptyFilterState();
 const stalePendingHandled = new Set();
+
+// ─── Selection State ───
+let isSelectionMode = false;
+let selectedPropertyIds = new Set();
 
 function getTimestampMillis(ts) {
   if (!ts) return 0;
@@ -93,9 +97,11 @@ function buildCardHtml(item, i, userNameMap) {
       : 'status-inactive';
 
   return `
-    <a href="#property/${item.id}" class="card card-interactive animate-enter property-card-link" style="--delay:${(i + 1) * 40}ms; text-decoration: none; display: block; color: inherit;">
-      <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
-        <div class="card-thumbnail-wrapper property-card-thumbnail">
+    <div class="card card-interactive animate-enter property-card-link ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative;">
+      ${isSelectionMode ? `<div class="card-selection-overlay"></div>` : ''}
+      <a href="${isSelectionMode ? '#' : `#property/${item.id}`}" style="text-decoration: none; display: block; color: inherit;">
+        <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
+          <div class="card-thumbnail-wrapper property-card-thumbnail">
           ${firstThumb ? `
             <img src="${firstThumb}" class="card-thumbnail" alt="${item.name}" loading="lazy" />
           ` : `
@@ -128,7 +134,8 @@ function buildCardHtml(item, i, userNameMap) {
           <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail?.split('@')[0] || userNameMap[item.createdBy] || 'Unknown Agent'}</span>
         ` : ''}
       </div>
-    </a>
+      </a>
+    </div>
   `;
 }
 
@@ -138,6 +145,10 @@ function renderSearchBar() {
   const activeCount = countActiveFilters(filterState);
   return `
     <div class="search-bar-container">
+      <div style="display:flex; justify-content:space-between; align-items:center; width: 100%; margin-bottom: 8px;">
+        <span style="font-size: 14px; color: var(--text-secondary);">Inventory</span>
+        <button id="toggle-selection-btn" class="header-select-btn">${isSelectionMode ? 'Cancel' : 'Select'}</button>
+      </div>
       <div class="search-bar">
         <svg class="search-bar-icon" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
         <input type="text" class="search-bar-input" id="home-search-input" placeholder="Search properties..." value="${filterState.searchText}" autocomplete="off" />
@@ -146,6 +157,47 @@ function renderSearchBar() {
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
           ${activeCount > 0 ? `<span class="filter-badge">${activeCount}</span>` : ''}
         </button>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Batch Action Bar HTML ───
+
+function renderBatchActionBar(filteredItemsCount) {
+  if (!isSelectionMode) return '';
+  const count = selectedPropertyIds.size;
+  const allSelected = count > 0 && count === filteredItemsCount;
+
+  return `
+    <div class="selection-action-bar">
+      <div class="selection-info">
+        <span style="color:var(--accent-green)">${count}</span> Selected
+      </div>
+      <div class="selection-actions">
+        <button id="btn-select-all" title="${allSelected ? 'Deselect All' : 'Select All'}">
+          ${allSelected 
+            ? `<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>`
+            : `<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>`}
+        </button>
+        <button id="btn-batch-status" title="Change Status" ${count === 0 ? 'disabled style="opacity:0.5"' : ''}>
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
+        </button>
+        <button id="btn-batch-copy" title="Copy Summary" ${count === 0 ? 'disabled style="opacity:0.5"' : ''}>
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+        </button>
+        <button id="btn-batch-share" title="Share" ${count === 0 ? 'disabled style="opacity:0.5"' : ''}>
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+        </button>
+        <button id="btn-batch-delete" class="action-delete" title="Delete Selected" ${count === 0 ? 'disabled style="opacity:0.5"' : ''}>
+          <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        </button>
+      </div>
+
+      <div class="batch-status-menu" id="batch-status-menu">
+        <button class="batch-status-opt" data-status="Occupied">Set Occupied</button>
+        <button class="batch-status-opt" data-status="Available">Set Available</button>
+        <button class="batch-status-opt" data-status="Under Construction">Set Under Construction</button>
       </div>
     </div>
   `;
@@ -309,6 +361,196 @@ function renderAdvancedFilterPanel(facets) {
 let debounceTimer = null;
 
 function attachHomeInteractions(container, renderFn) {
+  // Toggle Selection Mode
+  const toggleBtn = document.getElementById('toggle-selection-btn');
+  if (toggleBtn) {
+    toggleBtn.onclick = () => {
+      isSelectionMode = !isSelectionMode;
+      if (!isSelectionMode) selectedPropertyIds.clear();
+      renderFn();
+    };
+  }
+
+  // Card Clicks (Selection vs Navigation)
+  container.querySelectorAll('.property-card-link').forEach(el => {
+    el.addEventListener('click', (e) => {
+      const id = el.dataset.propertyId;
+      if (isSelectionMode) {
+        e.preventDefault();
+        if (selectedPropertyIds.has(id)) selectedPropertyIds.delete(id);
+        else selectedPropertyIds.add(id);
+        renderFn();
+      } else {
+        sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
+      }
+    });
+  });
+
+  // Batch Actions
+  const btnSelectAll = document.getElementById('btn-select-all');
+  if (btnSelectAll) {
+    btnSelectAll.onclick = () => {
+      // Find filtered items count from property-list
+      const listEl = document.getElementById('property-list');
+      const cards = listEl ? Array.from(listEl.querySelectorAll('.property-card-link')) : [];
+      const allIds = cards.map(c => c.dataset.propertyId);
+      
+      if (allIds.length > 0 && selectedPropertyIds.size === allIds.length) {
+        selectedPropertyIds.clear();
+      } else {
+        allIds.forEach(id => selectedPropertyIds.add(id));
+      }
+      renderFn();
+    };
+  }
+
+  // Batch Status
+  const btnStatus = document.getElementById('btn-batch-status');
+  if (btnStatus) {
+    btnStatus.onclick = (e) => {
+      e.stopPropagation();
+      document.getElementById('batch-status-menu')?.classList.toggle('visible');
+    };
+  }
+  
+  // Close batch status menu when clicking outside
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('batch-status-menu');
+    if (menu && menu.classList.contains('visible') && !e.target.closest('.selection-action-bar')) {
+      menu.classList.remove('visible');
+    }
+  });
+
+  document.querySelectorAll('.batch-status-opt').forEach(btn => {
+    btn.onclick = async (e) => {
+      const status = e.target.dataset.status;
+      if (selectedPropertyIds.size === 0) return;
+      const ids = Array.from(selectedPropertyIds);
+      
+      import('../utils/ui.js').then(async ({ showToast }) => {
+        showToast(`Updating status for ${ids.length} properties...`, 'info');
+        isSelectionMode = false;
+        selectedPropertyIds.clear();
+        renderFn();
+        
+        try {
+          await Promise.all(ids.map(id => updateInventoryItem(id, { status })));
+          showToast(`Updated ${ids.length} properties.`, 'success');
+          // Re-fetch everything gracefully
+          const { getInventoryItems } = await import('../backend/inventoryService.js');
+          getInventoryItems({}, cachedItems => { 
+            window.__invalidateHomeCache?.(); 
+            // the callback re-renders
+          });
+        } catch (err) {
+          showToast('Failed to update status: ' + err.message, 'error');
+        }
+      });
+    };
+  });
+
+  // Batch Delete
+  const btnDelete = document.getElementById('btn-batch-delete');
+  if (btnDelete) {
+    btnDelete.onclick = async () => {
+      if (selectedPropertyIds.size === 0) return;
+      
+      // Validation check
+      const ids = Array.from(selectedPropertyIds);
+      const role = window.userProfile?.role;
+      const uid = window.userProfile?.uid;
+      const isAdmin = role === 'admin';
+      
+      const itemsToDelete = cachedItems.filter(i => selectedPropertyIds.has(i.id));
+      const unauthorized = itemsToDelete.filter(i => i.createdBy !== uid && !isAdmin);
+      
+      if (unauthorized.length > 0) {
+        import('../utils/ui.js').then(({ showToast }) => showToast(`You do not have permission to delete ${unauthorized.length} of the selected properties.`, 'error'));
+        return;
+      }
+
+      if (!confirm(`Are you sure you want to permanently delete ${ids.length} properties?`)) return;
+
+      import('../utils/ui.js').then(async ({ showToast }) => {
+        showToast(`Deleting ${ids.length} properties...`, 'info');
+        isSelectionMode = false;
+        selectedPropertyIds.clear();
+        
+        // Optimistic update
+        cachedItems = cachedItems.filter(i => !ids.includes(i.id));
+        renderFn();
+
+        try {
+          await Promise.all(ids.map(id => deleteInventoryItem(id)));
+          showToast(`Deleted ${ids.length} properties.`, 'success');
+        } catch (err) {
+          showToast('Failed to delete: ' + err.message, 'error');
+        }
+      });
+    };
+  }
+
+  // Batch Copy & Share logic
+  function formatPropertyForCopy(item) {
+    const size = item.size ? `${item.size} sqft` : 'N/A sqft';
+    const rent = item.price ? `₹${item.price}/sqft` : 'Rent N/A';
+    const status = item.status || 'Active';
+    const loc = String(item.location || 'No location').trim();
+    const link = `${window.location.origin}/#property/${item.id}`;
+    return `*${item.name || 'Unnamed Property'}* - ${loc}\nSize: ${size} | Rent: ${rent} | Status: ${status}\nLink: ${link}`;
+  }
+
+  const btnCopy = document.getElementById('btn-batch-copy');
+  if (btnCopy) {
+    btnCopy.onclick = async () => {
+      if (selectedPropertyIds.size === 0) return;
+      const selectedItems = cachedItems.filter(i => selectedPropertyIds.has(i.id));
+      const text = selectedItems.map(formatPropertyForCopy).join('\n\n---\n\n');
+      import('../utils/ui.js').then(async ({ showToast }) => {
+        try {
+          await navigator.clipboard.writeText(text);
+          showToast(`Copied ${selectedItems.length} properties to clipboard`, 'success');
+          isSelectionMode = false;
+          selectedPropertyIds.clear();
+          renderFn();
+        } catch (err) {
+          showToast('Failed to copy', 'error');
+        }
+      });
+    };
+  }
+
+  const btnShare = document.getElementById('btn-batch-share');
+  if (btnShare) {
+    btnShare.onclick = async () => {
+      if (selectedPropertyIds.size === 0) return;
+      const selectedItems = cachedItems.filter(i => selectedPropertyIds.has(i.id));
+      const text = selectedItems.map(formatPropertyForCopy).join('\n\n---\n\n');
+      
+      import('../utils/ui.js').then(async ({ showToast }) => {
+        try {
+          if (navigator.share) {
+            await navigator.share({
+              title: `Footfall Properties (${selectedItems.length})`,
+              text: text
+            });
+            isSelectionMode = false;
+            selectedPropertyIds.clear();
+            renderFn();
+          } else {
+            await navigator.clipboard.writeText(text);
+            showToast(`Copied! (Native share not supported)`, 'success');
+            isSelectionMode = false;
+            selectedPropertyIds.clear();
+            renderFn();
+          }
+        } catch (err) {
+          if (err.name !== 'AbortError') showToast('Failed to share', 'error');
+        }
+      });
+    };
+  }
+
   // Location link clicks
   container.querySelectorAll('.card-location-link').forEach(el => {
     el.addEventListener('click', (event) => {
@@ -637,6 +879,14 @@ export const renderHome = async (container, options = {}) => {
 
         // We skip updating the Chip Bar during active typing to avoid layout shifts / focus theft
         // but we'll attach interactions to the new cards
+        
+        // Update batch action bar dynamically
+        const batchBar = container.querySelector('.selection-action-bar');
+        if (batchBar) batchBar.remove();
+        if (isSelectionMode && listContainer) {
+           listContainer.insertAdjacentHTML('afterend', renderBatchActionBar(filtered.length));
+        }
+
         attachHomeInteractions(container, reRenderFromCache);
       } else {
         // Full Render: Not currently typing, safe to overwrite
@@ -668,6 +918,7 @@ export const renderHome = async (container, options = {}) => {
               </div>
             `}
           </div>
+          ${renderBatchActionBar(filtered.length)}
           ${renderAdvancedFilterPanel(rawFacets)}
         `;
 
