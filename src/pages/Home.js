@@ -565,63 +565,124 @@ export const renderHome = async (container, options = {}) => {
   const silent = options.silent === true;
   const currentScroll = window.scrollY || 0;
 
-  // Fast re-render from data cache
-  const reRenderFromCache = () => {
-    if (!cachedItems) return;
-    const currentUid = window.userProfile?.uid || '';
-    const visibleItems = cachedItems.filter(item => {
-      const status = String(item.status || 'active').toLowerCase();
-      if (status === 'active') return true;
-      return Boolean(currentUid) && item.createdBy === currentUid;
-    });
-    const isOffline = !navigator.onLine;
-    const facets = extractFacets(visibleItems);
-    const filtered = applyFilters(visibleItems, filterState);
-    const hasFilters = hasActiveFilters(filterState) || filterState.searchText;
-    const cardsHtml = filtered.map((item, i) => buildCardHtml(item, i, cachedUserNameMap)).join('');
+    // Fast re-render from data cache
+    const reRenderFromCache = () => {
+      if (!cachedItems) return;
+      const currentUid = window.userProfile?.uid || '';
+      const visibleItems = cachedItems.filter(item => {
+        const status = String(item.status || 'active').toLowerCase();
+        if (status === 'active') return true;
+        return Boolean(currentUid) && item.createdBy === currentUid;
+      });
+      const isOffline = !navigator.onLine;
 
-    container.innerHTML = `
-      <div class="page-header animate-enter">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start">
-          <div>
-            <h1 class="text-display">Your Properties</h1>
-            <div style="display:flex; align-items:center; gap:var(--space-sm)">
-              <p class="text-label">${filtered.length}${hasFilters ? ` of ${visibleItems.length}` : ''} propert${filtered.length === 1 ? 'y' : 'ies'}</p>
-              ${isOffline ? '<span class="badge" style="background:var(--destructive-dim); color:white; border:none; font-size:10px">Offline: Cached</span>' : ''}
+      // Dynamic facets - updated to sort by count for "Top" pills
+      const rawFacets = extractFacets(visibleItems);
+      const tradeAreaCounts = {};
+      visibleItems.forEach(item => {
+        const ta = String(item.tradeArea || '').trim();
+        if (ta) tradeAreaCounts[ta] = (tradeAreaCounts[ta] || 0) + 1;
+      });
+      const topTradeAreas = Object.entries(tradeAreaCounts)
+        .sort((a,b) => b[1] - a[1]) // highest first
+        .slice(0, 6)
+        .map(entry => entry[0]);
+
+      const filtered = applyFilters(visibleItems, filterState);
+      const hasFilters = hasActiveFilters(filterState) || filterState.searchText;
+      const cardsHtml = filtered.map((item, i) => buildCardHtml(item, i, cachedUserNameMap)).join('');
+
+      // Focus Protection: If search input is active, only update list and chips
+      const searchInput = document.getElementById('home-search-input');
+      const isSearching = document.activeElement === searchInput;
+
+      if (isSearching && searchInput) {
+        // Partial Update: Only update the bits that change
+        const listContainer = document.getElementById('property-list');
+        if (listContainer) {
+          listContainer.innerHTML = filtered.length > 0 ? cardsHtml : `
+            <div class="empty-state animate-enter" style="--delay:100ms; padding: var(--space-xl) 0">
+              <svg class="empty-state-icon" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              <h2 class="text-heading" style="font-size:16px; margin-top:var(--space-md)">No properties match</h2>
+              <p class="text-label" style="margin-top:var(--space-xs)">Try adjusting your search or filters</p>
+              ${hasFilters ? '<button class="btn-secondary btn-sm" id="clear-all-inline" style="margin-top:var(--space-md)">Clear All Filters</button>' : ''}
             </div>
-          </div>
-          <button class="btn-secondary dashboard-export-btn" id="export-trigger">
-            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-            Export
-          </button>
-        </div>
-        ${renderSearchBar()}
-        ${renderChipBar(facets)}
-      </div>
-      <div class="page-content" id="property-list">
-        ${filtered.length > 0 ? cardsHtml : `
-          <div class="empty-state animate-enter" style="--delay:100ms; padding: var(--space-xl) 0">
-            <svg class="empty-state-icon" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-            <h2 class="text-heading" style="font-size:16px; margin-top:var(--space-md)">No properties match</h2>
-            <p class="text-label" style="margin-top:var(--space-xs)">Try adjusting your search or filters</p>
-            ${hasFilters ? '<button class="btn-secondary btn-sm" id="clear-all-inline" style="margin-top:var(--space-md)">Clear All Filters</button>' : ''}
-          </div>
-        `}
-      </div>
-      ${renderAdvancedFilterPanel(facets)}
-    `;
+          `;
+        }
 
-    attachHomeInteractions(container, reRenderFromCache);
+        // Update result count label
+        const resultLabel = container.querySelector('.text-label');
+        if (resultLabel) {
+          resultLabel.textContent = `${filtered.length}${hasFilters ? ` of ${visibleItems.length}` : ''} propert${filtered.length === 1 ? 'y' : 'ies'}`;
+        }
 
-    // Inline "Clear All" inside empty state
-    const clearAllInline = document.getElementById('clear-all-inline');
-    if (clearAllInline) {
-      clearAllInline.onclick = () => {
-        filterState = createEmptyFilterState();
-        reRenderFromCache();
-      };
-    }
-  };
+        // Update clear button visibility
+        const clearBtn = document.getElementById('search-clear-btn');
+        if (clearBtn) {
+          clearBtn.style.display = filterState.searchText ? 'block' : 'none';
+        } else if (filterState.searchText) {
+          // If clear btn was missing but needed, we might need a fuller header update or just let it be
+        }
+
+        // Update filter badge
+        const filterBadge = document.querySelector('.filter-badge');
+        const activeCount = countActiveFilters(filterState);
+        if (filterBadge) {
+          if (activeCount > 0) filterBadge.textContent = activeCount;
+          else filterBadge.remove();
+        } else if (activeCount > 0) {
+          const filterBtn = document.getElementById('filter-panel-toggle');
+          if (filterBtn) filterBtn.insertAdjacentHTML('beforeend', `<span class="filter-badge">${activeCount}</span>`);
+        }
+
+        // We skip updating the Chip Bar during active typing to avoid layout shifts / focus theft
+        // but we'll attach interactions to the new cards
+        attachHomeInteractions(container, reRenderFromCache);
+      } else {
+        // Full Render: Not currently typing, safe to overwrite
+        container.innerHTML = `
+          <div class="page-header animate-enter">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start">
+              <div>
+                <h1 class="text-display">Your Properties</h1>
+                <div style="display:flex; align-items:center; gap:var(--space-sm)">
+                  <p class="text-label">${filtered.length}${hasFilters ? ` of ${visibleItems.length}` : ''} propert${filtered.length === 1 ? 'y' : 'ies'}</p>
+                  ${isOffline ? '<span class="badge" style="background:var(--destructive-dim); color:white; border:none; font-size:10px">Offline: Cached</span>' : ''}
+                </div>
+              </div>
+              <button class="btn-secondary dashboard-export-btn" id="export-trigger">
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Export
+              </button>
+            </div>
+            ${renderSearchBar()}
+            ${renderChipBar({ ...rawFacets, tradeAreas: topTradeAreas })}
+          </div>
+          <div class="page-content" id="property-list">
+            ${filtered.length > 0 ? cardsHtml : `
+              <div class="empty-state animate-enter" style="--delay:100ms; padding: var(--space-xl) 0">
+                <svg class="empty-state-icon" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <h2 class="text-heading" style="font-size:16px; margin-top:var(--space-md)">No properties match</h2>
+                <p class="text-label" style="margin-top:var(--space-xs)">Try adjusting your search or filters</p>
+                ${hasFilters ? '<button class="btn-secondary btn-sm" id="clear-all-inline" style="margin-top:var(--space-md)">Clear All Filters</button>' : ''}
+              </div>
+            `}
+          </div>
+          ${renderAdvancedFilterPanel(rawFacets)}
+        `;
+
+        attachHomeInteractions(container, reRenderFromCache);
+      }
+
+      // Inline "Clear All" inside empty state
+      const clearAllInline = document.getElementById('clear-all-inline');
+      if (clearAllInline) {
+        clearAllInline.onclick = () => {
+          filterState = createEmptyFilterState();
+          reRenderFromCache();
+        };
+      }
+    };
 
   // If we have cached data and this is NOT a forced refresh, re-render immediately
   if (cachedItems && !forceRefresh) {
