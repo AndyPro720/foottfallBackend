@@ -295,7 +295,7 @@ export const renderPropertyDetail = async (container, id) => {
     }).join('');
 
     // ─── Phase 9: Prepare Slider Media ───
-    const mediaOrder = ['buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan', 'entryToBuilding'];
+    const mediaOrder = ['entryToBuilding', 'buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan'];
     const allMedia = [];
     mediaOrder.forEach(key => {
       const urls = item.images?.[key] || [];

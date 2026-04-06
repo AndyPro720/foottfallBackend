@@ -58,7 +58,7 @@ function getMapLink(item) {
 // ─── Card Builder ───
 
 function buildCardHtml(item, i, userNameMap) {
-  const categories = ['buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan'];
+  const categories = ['entryToBuilding', 'buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan'];
   let totalPhotos = 0;
   let firstThumb = null;
 

@@ -1,5 +1,6 @@
 import { getInventoryItemById, updateInventoryItem } from '../backend/inventoryService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
+import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
 import { SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
@@ -52,6 +53,32 @@ function uniqueFiles(existingFiles, newFiles) {
     merged.push(file);
   });
   return merged;
+}
+
+function isDocumentNotReadyError(error) {
+  const message = String(error?.message || '');
+  return error?.code === 'not-found' || message.includes('No document to update');
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function updateInventoryItemWithRetry(id, data, maxAttempts = 5) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await updateInventoryItem(id, data);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isDocumentNotReadyError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await wait(attempt * 300);
+    }
+  }
+  throw lastError;
 }
 
 // Render helpers (reused from IntakeForm)
@@ -594,28 +621,97 @@ export const renderEditProperty = async (container, id) => {
         data.longitude = Number(lng);
       }
 
+      data.mediaUploadPending = fileFields.length > 0;
 
-      // Handle new photo uploads with granular updates
+      // Handle new photo uploads with background sync
       if (fileFields.length > 0) {
-        btn.textContent = 'Uploading media...';
-        const uploaded = await Promise.all(
-          fileFields.map(async (f) => {
-            const urls = await uploadMultipleFiles(f.files, `properties/${id}/${f.name}`);
-            return { field: f, urls };
-          })
-        );
-
-        uploaded.forEach(({ field: f, urls }) => {
-          if (urls.length > 0) {
-            if (f.isFacility) {
-              data[`${f.name}Photo`] = urls[0];
-            } else {
-              // Merge with remaining
-              const existing = data[`images.${f.name}`] || [];
-              data[`images.${f.name}`] = [...existing, ...urls];
-            }
+        const runBackgroundUpload = async () => {
+          if (!navigator.onLine) {
+            addUploadLog('⏸ Offline — upload paused until reconnect', 'pending');
+            window.addEventListener('online', () => {
+              addUploadLog('🌐 Back online — resuming uploads');
+              runBackgroundUpload().catch((retryErr) => {
+                console.error('Background media upload retry failed:', retryErr);
+              });
+            }, { once: true });
+            return;
           }
-        });
+
+          const allFiles = fileFields.flatMap(f => Array.from(f.files || []));
+          const session = createUploadSession('Property Media', allFiles);
+
+          let hadUploadFailure = false;
+          let fileOffset = 0;
+
+          for (const field of fileFields) {
+            if (!Array.isArray(field.files) || field.files.length === 0) {
+              hadUploadFailure = true;
+              addUploadLog(`⚠ No files for ${field.name}`, 'error');
+              continue;
+            }
+
+            const currentOffset = fileOffset;
+            const path = `properties/${id}/${field.name}`;
+            try {
+              const urls = await uploadMultipleFiles(field.files, path, null, (idx, pct, status, error) => {
+                const globalIdx = currentOffset + idx;
+                if (status === 'converting') session.markConverting(globalIdx);
+                else if (status === 'error') session.markError(globalIdx, error);
+                else if (status === 'done') session.markDone(globalIdx);
+                else session.updateProgress(globalIdx, pct);
+              });
+
+              if (urls.length > 0) {
+                const updateData = {};
+                if (field.isFacility) {
+                  updateData[`${field.name}Photo`] = urls[0];
+                } else {
+                  const existing = data[`images.${field.name}`] || [];
+                  updateData[`images.${field.name}`] = [...existing, ...urls];
+                }
+                addUploadLog(`Saving ${field.name} to database...`);
+                await updateInventoryItemWithRetry(id, updateData);
+              } else {
+                hadUploadFailure = true;
+              }
+            } catch (uploadErr) {
+              hadUploadFailure = true;
+              for (let i = 0; i < field.files.length; i++) {
+                session.markError(currentOffset + i, uploadErr.message || 'Upload failed');
+              }
+              console.error(`Upload failed for ${field.name}:`, uploadErr);
+            }
+            fileOffset += field.files.length;
+          }
+
+          await updateInventoryItemWithRetry(id, { mediaUploadPending: hadUploadFailure });
+          if (typeof window.__invalidateHomeCache === 'function') {
+            window.__invalidateHomeCache();
+          }
+
+          const { done, errors } = session.summary;
+          if (hadUploadFailure) {
+            addUploadLog(`⚠ ${done} uploaded, ${errors} failed`, 'error');
+          } else {
+            addUploadLog(`✓ All ${done} files synced`, 'done');
+          }
+        };
+
+        // First update the property locally (fast)
+        await updateInventoryItemWithRetry(id, data);
+        
+        addUploadLog('Property data saved. Starting media upload...');
+        showToast('Changes saved. You can continue browsing while media uploads.', 'info');
+        window.location.hash = `#property/${id}`;
+        
+        // Start background upload
+        setTimeout(() => {
+          runBackgroundUpload().catch((bgErr) => {
+            addUploadLog(`✗ Upload crashed: ${bgErr.message}`, 'error');
+            console.error('Background media upload failed:', bgErr);
+          });
+        }, 0);
+        return;
       }
 
       await updateInventoryItem(id, data);
@@ -623,7 +719,7 @@ export const renderEditProperty = async (container, id) => {
       window.location.hash = `#property/${id}`;
     } catch (err) {
       console.error(err);
-      alert('Failed to save changes');
+      alert('Failed to save changes: ' + err.message);
       btn.classList.remove('btn-loading');
       btn.disabled = false;
     }
