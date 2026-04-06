@@ -194,6 +194,8 @@ function renderField(field) {
 // ─── Main Render ───
 
 export const renderIntakeForm = (container) => {
+  const selectedFilesByUpload = new Map();
+
   const sectionsHtml = SECTIONS.map(section => `
     <div class="form-section ${section.collapsed ? 'collapsed' : ''}" data-section="${section.id}">
       <div class="form-section-header">
@@ -277,6 +279,7 @@ export const renderIntakeForm = (container) => {
     const uploadName = zone.dataset.upload;
     const previewGrid = container.querySelector(`[data-previews="${uploadName}"]`);
     let selectedFiles = Array.from(input.files || []);
+    selectedFilesByUpload.set(uploadName, selectedFiles);
 
     zone.addEventListener('click', (event) => {
       if (event.target.closest('.capture-video-btn')) return;
@@ -301,6 +304,7 @@ export const renderIntakeForm = (container) => {
           } else {
             selectedFiles = [capturedFiles[capturedFiles.length - 1]];
           }
+          selectedFilesByUpload.set(uploadName, selectedFiles);
 
           const merged = mergeFilesIntoInput(input, selectedFiles);
           if (!merged) {
@@ -325,6 +329,7 @@ export const renderIntakeForm = (container) => {
       } else {
         selectedFiles = incoming.length > 0 ? [incoming[incoming.length - 1]] : [];
       }
+      selectedFilesByUpload.set(uploadName, selectedFiles);
 
       let hasOversized = false;
       let hasHeicPreviewFailure = false;
@@ -496,6 +501,13 @@ export const renderIntakeForm = (container) => {
     try {
       const data = {};
       const fileFields = [];
+      const getSelectedFiles = (uploadKey, inputEl) => {
+        const snapshot = selectedFilesByUpload.get(uploadKey);
+        if (Array.isArray(snapshot) && snapshot.length > 0) {
+          return snapshot;
+        }
+        return Array.from(inputEl?.files || []);
+      };
 
       SECTIONS.forEach(section => {
         section.fields.forEach(field => {
@@ -512,20 +524,22 @@ export const renderIntakeForm = (container) => {
 
             if (field.hasPhoto && isYes) {
               const fileInput = container.querySelector(`[data-upload="${field.name}Photo"] input[data-main-upload="true"]`);
-              if (fileInput?.files?.length > 0) {
+              const selected = getSelectedFiles(`${field.name}Photo`, fileInput);
+              if (selected.length > 0) {
                 fileFields.push({
                   name: field.name,
-                  files: Array.from(fileInput.files),
+                  files: selected,
                   isFacility: true
                 });
               }
             }
           } else if (field.type === 'file') {
             const fileInput = container.querySelector(`[data-upload="${field.name}"] input[data-main-upload="true"]`);
-            if (fileInput?.files?.length > 0) {
+            const selected = getSelectedFiles(field.name, fileInput);
+            if (selected.length > 0) {
               fileFields.push({
                 name: field.name,
-                files: Array.from(fileInput.files)
+                files: selected
               });
             }
           } else {
@@ -564,32 +578,34 @@ export const renderIntakeForm = (container) => {
           }
 
           let hadUploadFailure = false;
-          for (const field of fileFields) {
-            if (!Array.isArray(field.files) || field.files.length === 0) {
-              hadUploadFailure = true;
-              console.warn(`No files available in background snapshot for ${field.name}`);
-              continue;
-            }
-
-            const path = `properties/${docId}/${field.name}`;
-            try {
-              const urls = await uploadMultipleFiles(field.files, path);
-              if (urls.length > 0) {
-                const updateData = {};
-                if (field.isFacility) {
-                  updateData[`${field.name}Photo`] = urls[0];
-                } else {
-                  updateData[`images.${field.name}`] = urls;
-                }
-                await updateInventoryItemWithRetry(docId, updateData);
-              } else {
+          await Promise.all(
+            fileFields.map(async (field) => {
+              if (!Array.isArray(field.files) || field.files.length === 0) {
                 hadUploadFailure = true;
+                console.warn(`No files available in background snapshot for ${field.name}`);
+                return;
               }
-            } catch (uploadErr) {
-              hadUploadFailure = true;
-              console.error(`Upload failed for ${field.name}:`, uploadErr);
-            }
-          }
+
+              const path = `properties/${docId}/${field.name}`;
+              try {
+                const urls = await uploadMultipleFiles(field.files, path);
+                if (urls.length > 0) {
+                  const updateData = {};
+                  if (field.isFacility) {
+                    updateData[`${field.name}Photo`] = urls[0];
+                  } else {
+                    updateData[`images.${field.name}`] = urls;
+                  }
+                  await updateInventoryItemWithRetry(docId, updateData);
+                } else {
+                  hadUploadFailure = true;
+                }
+              } catch (uploadErr) {
+                hadUploadFailure = true;
+                console.error(`Upload failed for ${field.name}:`, uploadErr);
+              }
+            })
+          );
 
           await updateInventoryItemWithRetry(docId, { mediaUploadPending: hadUploadFailure });
           if (typeof window.__invalidateHomeCache === 'function') {

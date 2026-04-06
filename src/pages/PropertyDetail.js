@@ -295,7 +295,7 @@ export const renderPropertyDetail = async (container, id) => {
     }).join('');
 
     // ─── Phase 9: Prepare Slider Media ───
-    const mediaOrder = ['buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan'];
+    const mediaOrder = ['buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan', 'entryToBuilding'];
     const allMedia = [];
     mediaOrder.forEach(key => {
       const urls = item.images?.[key] || [];
@@ -556,7 +556,8 @@ function renderPhotoGallery(item) {
     { key: 'unitFacade', label: 'Unit Facade' },
     { key: 'interior', label: 'Interior' },
     { key: 'signage', label: 'Signage' },
-    { key: 'floorPlan', label: 'Floor Plan' }
+    { key: 'floorPlan', label: 'Floor Plan' },
+    { key: 'entryToBuilding', label: 'Entry to Building' }
   ];
 
   const categoriesHtml = photoCategories.map(cat => {

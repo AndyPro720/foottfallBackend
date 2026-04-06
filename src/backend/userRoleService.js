@@ -5,6 +5,23 @@ let profileCache = null;
 let profileCacheUid = '';
 let profileCacheAt = 0;
 const PROFILE_CACHE_TTL_MS = 60 * 1000;
+const LAST_LOGIN_THROTTLE_MS = 30 * 60 * 1000;
+
+function shouldRefreshLastLogin(uid) {
+  if (!uid) return false;
+  try {
+    const key = `ff:lastLoginSync:${uid}`;
+    const previous = Number(localStorage.getItem(key) || '0');
+    const now = Date.now();
+    if (Number.isFinite(previous) && previous > 0 && (now - previous) < LAST_LOGIN_THROTTLE_MS) {
+      return false;
+    }
+    localStorage.setItem(key, String(now));
+    return true;
+  } catch {
+    return true;
+  }
+}
 
 /**
  * Ensures a user document exists in Firestore and returns the user's role.
@@ -17,6 +34,7 @@ export async function syncUserProfile(user) {
 
   // Background non-blocking update for lastLogin
   const updateLastLogin = async () => {
+    if (!shouldRefreshLastLogin(user.uid)) return;
     try {
       await setDoc(userDocRef, { lastLogin: serverTimestamp() }, { merge: true });
     } catch (e) {

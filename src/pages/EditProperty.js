@@ -297,12 +297,14 @@ export const renderEditProperty = async (container, id) => {
   });
 
   // Update file previews for new uploads with proper thumbnails
+  const selectedFilesByUpload = new Map();
   container.querySelectorAll('.file-upload-zone').forEach(zone => {
     const input = zone.querySelector('input[data-main-upload="true"]') || zone.querySelector('input[type="file"]');
     const captureButton = zone.querySelector('.capture-video-btn');
     const name = zone.dataset.upload;
     const previewGrid = container.querySelector(`[data-previews="${name}"]`);
     let selectedFiles = Array.from(input.files || []);
+    selectedFilesByUpload.set(name, selectedFiles);
 
     zone.addEventListener('click', (event) => {
       if (event.target.closest('.capture-video-btn')) return;
@@ -327,6 +329,7 @@ export const renderEditProperty = async (container, id) => {
           } else {
             selectedFiles = [capturedFiles[capturedFiles.length - 1]];
           }
+          selectedFilesByUpload.set(name, selectedFiles);
 
           const merged = mergeFilesIntoInput(input, selectedFiles);
           if (!merged) {
@@ -352,6 +355,7 @@ export const renderEditProperty = async (container, id) => {
       } else {
         selectedFiles = incoming.length > 0 ? [incoming[incoming.length - 1]] : [];
       }
+      selectedFilesByUpload.set(name, selectedFiles);
 
       let hasOversized = false;
       let hasHeicPreviewFailure = false;
@@ -526,6 +530,13 @@ export const renderEditProperty = async (container, id) => {
     try {
       const data = {};
       const fileFields = [];
+      const getSelectedFiles = (uploadKey, inputEl) => {
+        const snapshot = selectedFilesByUpload.get(uploadKey);
+        if (Array.isArray(snapshot) && snapshot.length > 0) {
+          return snapshot;
+        }
+        return Array.from(inputEl?.files || []);
+      };
 
       SECTIONS.forEach(section => {
         section.fields.forEach(field => {
@@ -544,8 +555,9 @@ export const renderEditProperty = async (container, id) => {
             }
             if (field.hasPhoto && isYes) {
               const fileInput = container.querySelector(`[data-upload="${field.name}Photo"] input[data-main-upload="true"]`);
-              if (fileInput?.files?.length > 0) {
-                fileFields.push({ name: field.name, files: fileInput.files, isFacility: true });
+              const selected = getSelectedFiles(`${field.name}Photo`, fileInput);
+              if (selected.length > 0) {
+                fileFields.push({ name: field.name, files: selected, isFacility: true });
               }
             }
           } else if (field.type === 'file') {
@@ -555,8 +567,9 @@ export const renderEditProperty = async (container, id) => {
             data[`images.${field.name}`] = remaining;
 
             const fileInput = container.querySelector(`[data-upload="${field.name}"] input[data-main-upload="true"]`);
-            if (fileInput?.files?.length > 0) {
-              fileFields.push({ name: field.name, files: fileInput.files });
+            const selected = getSelectedFiles(field.name, fileInput);
+            if (selected.length > 0) {
+              fileFields.push({ name: field.name, files: selected });
             }
           } else if (field.type !== 'facilityPhoto') {
             const val = container.querySelector(`#${field.name}`)?.value;
@@ -576,9 +589,15 @@ export const renderEditProperty = async (container, id) => {
 
       // Handle new photo uploads with granular updates
       if (fileFields.length > 0) {
-        for (const f of fileFields) {
-          btn.textContent = `Uploading ${f.name}...`;
-          const urls = await uploadMultipleFiles(f.files, `properties/${id}/${f.name}`);
+        btn.textContent = 'Uploading media...';
+        const uploaded = await Promise.all(
+          fileFields.map(async (f) => {
+            const urls = await uploadMultipleFiles(f.files, `properties/${id}/${f.name}`);
+            return { field: f, urls };
+          })
+        );
+
+        uploaded.forEach(({ field: f, urls }) => {
           if (urls.length > 0) {
             if (f.isFacility) {
               data[`${f.name}Photo`] = urls[0];
@@ -588,7 +607,7 @@ export const renderEditProperty = async (container, id) => {
               data[`images.${f.name}`] = [...existing, ...urls];
             }
           }
-        }
+        });
       }
 
       await updateInventoryItem(id, data);

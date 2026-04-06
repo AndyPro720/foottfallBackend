@@ -18,7 +18,6 @@ const app = document.getElementById('app');
 let topBarDocClickHandler = null;
 let lastHash = window.location.hash || '#';
 let authResolved = false;
-let authResolutionTimedOut = false;
 
 function applyPlatformClasses() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -233,6 +232,18 @@ const router = async () => {
 
     // Public routes
     if (hash === '#login') {
+      if (!authResolved) {
+        app.innerHTML = `
+          <div class="page-header animate-enter">
+            <h1 class="text-display">Restoring Session</h1>
+            <p class="text-label">Checking your saved sign-in...</p>
+          </div>
+          <div class="page-content">
+            <div class="skeleton skeleton-card animate-enter" style="--delay:60ms"></div>
+          </div>
+        `;
+        return;
+      }
       if (user) {
         window.location.hash = '#';
         return;
@@ -243,7 +254,7 @@ const router = async () => {
 
     // Protected routes
     if (!user) {
-      if (!authResolved && !authResolutionTimedOut) {
+      if (!authResolved) {
         app.innerHTML = `
           <div class="page-header animate-enter">
             <h1 class="text-display">Restoring Session</h1>
@@ -360,7 +371,6 @@ applyPlatformClasses();
 
 onAuthStateChanged(auth, (user) => {
   authResolved = true;
-  authResolutionTimedOut = true;
   if (user) {
     syncUserProfile(user).catch(err => console.error('Sync profile error:', err));
   }
@@ -371,8 +381,7 @@ onAuthStateChanged(auth, (user) => {
 // This prevents the infinite green screen when opening the PWA offline
 setTimeout(() => {
   if (!authResolved) {
-    authResolutionTimedOut = true;
-    console.warn('Auth restore is slow, showing fallback routing after timeout.');
+    console.warn('Auth restore is slow, showing restoring-session UI.');
     router();
   }
 }, 4000);
