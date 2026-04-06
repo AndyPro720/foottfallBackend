@@ -88,7 +88,13 @@ export async function uploadMultipleFiles(files, basePath, onProgress = null) {
     if (isHeic) {
       try {
         const converted = await heicTo({ blob: file, type: "image/jpeg", quality: 0.8 });
-        const jpegBlob = converted instanceof Blob ? converted : new Blob([converted], { type: "image/jpeg" });
+        const jpegBlob = Array.isArray(converted)
+          ? (converted[0] instanceof Blob
+              ? converted[0]
+              : new Blob([converted[0]], { type: "image/jpeg" }))
+          : (converted instanceof Blob
+              ? converted
+              : new Blob([converted], { type: "image/jpeg" }));
         const outputName = (file.name || `upload_${Date.now()}`).replace(/\.hei(c|f)$/i, '.jpg');
         file = new File([jpegBlob], outputName, { type: "image/jpeg" });
       } catch (err) {

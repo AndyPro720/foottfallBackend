@@ -155,6 +155,22 @@ export const renderPropertyDetail = async (container, id) => {
       return;
     }
 
+    const currentUid = window.userProfile?.uid || '';
+    const normalizedStatus = String(item.status || 'active').toLowerCase();
+    if (normalizedStatus !== 'active' && item.createdBy !== currentUid) {
+      container.innerHTML = `
+        <div class="page-header animate-enter">
+          <h1 class="text-display">Access Restricted</h1>
+          <p class="text-label">This listing is not publicly visible.</p>
+        </div>
+        <div class="card animate-enter" style="--delay:100ms">
+          <p class="text-body">Only the property creator can view or edit this pending/inactive listing.</p>
+          <a href="#" class="btn-secondary" style="margin-top:var(--space-md); width:auto">Back to Dashboard</a>
+        </div>
+      `;
+      return;
+    }
+
     // ─── Render Sections ───
     const googleMapsLink = getNormalizedGoogleMapLink(item);
     const hasLeafletPin = hasPinnedCoordinates(item);
@@ -191,6 +207,23 @@ export const renderPropertyDetail = async (container, id) => {
         }
 
         if (field.type === 'facilityPhoto') return ''; // Legacy: handled within toggle above
+
+        if (field.type === 'file') {
+          const files = item.images?.[field.name] || [];
+          if (files.length === 0) return '';
+          return `
+            <div class="detail-item">
+              <span class="text-label">${field.label}</span>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                ${files.map((url, index) => `
+                  <a href="${url}" target="_blank" rel="noopener" class="link-primary" style="font-size:13px">
+                    Open File ${index + 1}
+                  </a>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
 
         if (!value) return '';
 

@@ -21,6 +21,9 @@ export const SECTIONS = [
       { name: 'tradeArea', label: 'Trade Area', type: 'text', placeholder: 'e.g., MG Road, Connaught Place' },
 
       { name: 'suitableFor', label: 'Suitable For', type: 'text', placeholder: 'e.g., F&B, Retail, Services' },
+      { name: 'presentationAvailable', label: 'Presentation Available', type: 'toggle' },
+      { name: 'presentationLink', label: 'Presentation Link', type: 'text', placeholder: 'Paste presentation URL', conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
+      { name: 'presentationFile', label: 'Presentation Attachment', type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,image/*,video/*', multiple: true, conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
     ]
   },
   {

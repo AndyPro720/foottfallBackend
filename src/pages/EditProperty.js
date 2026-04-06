@@ -13,6 +13,11 @@ function isLikelyHeicFile(file) {
 
 async function convertHeicToJpegBlob(file) {
   const converted = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.7 });
+  if (Array.isArray(converted) && converted.length > 0) {
+    const first = converted[0];
+    if (first instanceof Blob) return first;
+    return new Blob([first], { type: 'image/jpeg' });
+  }
   if (converted instanceof Blob) return converted;
   return new Blob([converted], { type: 'image/jpeg' });
 }
@@ -23,13 +28,24 @@ function mergeFilesIntoInput(input, incomingFiles) {
 
   const dt = new DataTransfer();
   if (input.multiple) {
-    Array.from(input.files || []).forEach((file) => dt.items.add(file));
     incomingFiles.forEach((file) => dt.items.add(file));
   } else {
     dt.items.add(incomingFiles[incomingFiles.length - 1]);
   }
   input.files = dt.files;
   return true;
+}
+
+function uniqueFiles(existingFiles, newFiles) {
+  const seen = new Set();
+  const merged = [];
+  [...existingFiles, ...newFiles].forEach((file) => {
+    const key = `${file.name}__${file.size}__${file.lastModified}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(file);
+  });
+  return merged;
 }
 
 // Render helpers (reused from IntakeForm)
@@ -71,8 +87,11 @@ function renderField(field, value) {
 
 
 function renderTextField(field, value = '') {
+  const conditionalAttr = field.conditionalOn
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
+    : '';
   return `
-    <div class="form-group">
+    <div class="form-group"${conditionalAttr}>
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
       <input class="form-input" type="${field.type}" id="${field.name}" name="${field.name}"
              placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''} value="${value}" />
@@ -81,8 +100,11 @@ function renderTextField(field, value = '') {
 }
 
 function renderSelect(field, value = '') {
+  const conditionalAttr = field.conditionalOn
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
+    : '';
   return `
-    <div class="form-group">
+    <div class="form-group"${conditionalAttr}>
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
       <select class="form-input form-select" id="${field.name}" name="${field.name}" ${field.required ? 'required' : ''}>
         <option value="" disabled ${!value ? 'selected' : ''}>Select...</option>
@@ -93,8 +115,11 @@ function renderSelect(field, value = '') {
 }
 
 function renderToggle(field, value = false) {
+  const conditionalAttr = field.conditionalOn
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
+    : '';
   return `
-    <div class="form-group">
+    <div class="form-group"${conditionalAttr}>
       <label class="form-label">${field.label}</label>
       <div class="toggle-group" data-toggle="${field.name}">
         <button type="button" class="toggle-option ${value ? 'active' : ''}" data-value="yes">Yes</button>
@@ -129,9 +154,12 @@ function renderToggle(field, value = false) {
 }
 
 function renderFileUpload(field, existingUrls = []) {
+  const conditionalAttr = field.conditionalOn
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
+    : '';
   const isVideo = (url) => /\.(mp4|webm|mov|avi|mkv)/i.test(url);
   return `
-    <div class="form-group">
+    <div class="form-group"${conditionalAttr}>
       <label class="form-label">${field.label}</label>
       <div class="file-preview-grid" data-previews="${field.name}">
         ${(existingUrls || []).map(url => `
@@ -163,6 +191,17 @@ export const renderEditProperty = async (container, id) => {
   item = await getInventoryItemById(id);
   if (!item) {
     container.innerHTML = `<div class="card card-error">Property not found</div>`;
+    return;
+  }
+
+  const currentUid = window.userProfile?.uid || '';
+  const normalizedStatus = String(item.status || 'active').toLowerCase();
+  if (normalizedStatus !== 'active' && item.createdBy !== currentUid) {
+    container.innerHTML = `
+      <div class="card card-error">
+        Only the property creator can edit pending/inactive listings.
+      </div>
+    `;
     return;
   }
 
@@ -214,8 +253,38 @@ export const renderEditProperty = async (container, id) => {
         container.querySelectorAll(`[data-condition="${fieldName}"]`).forEach(el => {
           el.style.display = condition ? 'block' : 'none';
         });
+        container.querySelectorAll(`[data-conditional-on="${fieldName}"]`).forEach(el => {
+          el.style.display = (el.dataset.conditionalValue === btn.dataset.value) ? 'block' : 'none';
+        });
       });
     });
+  });
+
+  container.querySelectorAll('select').forEach(selectEl => {
+    selectEl.addEventListener('change', (e) => {
+      const fieldName = e.target.name;
+      const value = e.target.value;
+      container.querySelectorAll(`[data-conditional-on="${fieldName}"]`).forEach(el => {
+        el.style.display = (el.dataset.conditionalValue === value) ? 'block' : 'none';
+      });
+    });
+  });
+
+  // Initialize conditional fields using current values.
+  container.querySelectorAll('[data-conditional-on]').forEach((el) => {
+    const controllingField = el.dataset.conditionalOn;
+    const expectedValue = el.dataset.conditionalValue;
+    const toggleActive = container.querySelector(`[data-toggle="${controllingField}"] .toggle-option.active`);
+    if (toggleActive) {
+      el.style.display = toggleActive.dataset.value === expectedValue ? 'block' : 'none';
+      return;
+    }
+    const input = container.querySelector(`[name="${controllingField}"]`);
+    if (!input) {
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = input.value === expectedValue ? 'block' : 'none';
   });
 
   // Handle existing photo removal
@@ -230,44 +299,44 @@ export const renderEditProperty = async (container, id) => {
   // Update file previews for new uploads with proper thumbnails
   container.querySelectorAll('.file-upload-zone').forEach(zone => {
     const input = zone.querySelector('input[data-main-upload="true"]') || zone.querySelector('input[type="file"]');
-    const videoCaptureInput = zone.querySelector('input[data-video-capture="true"]');
     const captureButton = zone.querySelector('.capture-video-btn');
     const name = zone.dataset.upload;
     const previewGrid = container.querySelector(`[data-previews="${name}"]`);
+    let selectedFiles = Array.from(input.files || []);
 
     zone.addEventListener('click', (event) => {
       if (event.target.closest('.capture-video-btn')) return;
       input.click();
     });
 
-    if (captureButton && videoCaptureInput) {
+    if (captureButton) {
       captureButton.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        videoCaptureInput.setAttribute('accept', 'video/*');
-        videoCaptureInput.setAttribute('capture', 'environment');
-        try {
-          if (typeof videoCaptureInput.showPicker === 'function') {
-            videoCaptureInput.showPicker();
+        const pickerInput = document.createElement('input');
+        pickerInput.type = 'file';
+        pickerInput.accept = 'video/*';
+        pickerInput.setAttribute('capture', 'environment');
+
+        pickerInput.addEventListener('change', () => {
+          const capturedFiles = Array.from(pickerInput.files || []);
+          if (capturedFiles.length === 0) return;
+
+          if (input.multiple) {
+            selectedFiles = uniqueFiles(selectedFiles, capturedFiles);
           } else {
-            videoCaptureInput.click();
+            selectedFiles = [capturedFiles[capturedFiles.length - 1]];
           }
-        } catch {
-          videoCaptureInput.click();
-        }
-      });
 
-      videoCaptureInput.addEventListener('change', () => {
-        const capturedFiles = Array.from(videoCaptureInput.files || []);
-        if (capturedFiles.length === 0) return;
+          const merged = mergeFilesIntoInput(input, selectedFiles);
+          if (!merged) {
+            showToast('Video captured. Please reselect it from files if it does not appear.', 'info');
+          }
 
-        const merged = mergeFilesIntoInput(input, capturedFiles);
-        if (!merged) {
-          showToast('Video captured. Please reselect it from files if it does not appear.', 'info');
-        }
+          input.dispatchEvent(new Event('change'));
+        }, { once: true });
 
-        videoCaptureInput.value = '';
-        input.dispatchEvent(new Event('change'));
+        pickerInput.click();
       });
     }
 
@@ -276,10 +345,18 @@ export const renderEditProperty = async (container, id) => {
       // Remove previous "new file" items (keep existing ones with data-url remove buttons)
       previewGrid.querySelectorAll('.file-preview-new').forEach(el => el.remove());
 
+      const incoming = Array.from(input.files || []);
+      if (input.multiple) {
+        selectedFiles = uniqueFiles(selectedFiles, incoming);
+        mergeFilesIntoInput(input, selectedFiles);
+      } else {
+        selectedFiles = incoming.length > 0 ? [incoming[incoming.length - 1]] : [];
+      }
+
       let hasOversized = false;
       let hasHeicPreviewFailure = false;
 
-      for (const file of Array.from(input.files)) {
+      for (const file of selectedFiles) {
         if (file.size > MAX_FILE_SIZE_BYTES) {
           hasOversized = true;
           continue;

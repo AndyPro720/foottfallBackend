@@ -4,7 +4,7 @@ import {
   persistentLocalCache, 
   persistentMultipleTabManager 
 } from "firebase/firestore";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
 // Ensure environment variables are prepended with VITE_ to be exposed by Vite
@@ -27,6 +27,9 @@ const db = initializeFirestore(app, {
 });
 
 const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.warn("Auth persistence setup warning:", error);
+});
 const googleProvider = new GoogleAuthProvider();
 const storage = getStorage(app);
 

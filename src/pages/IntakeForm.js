@@ -13,6 +13,11 @@ function isLikelyHeicFile(file) {
 
 async function convertHeicToJpegBlob(file) {
   const converted = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.7 });
+  if (Array.isArray(converted) && converted.length > 0) {
+    const first = converted[0];
+    if (first instanceof Blob) return first;
+    return new Blob([first], { type: 'image/jpeg' });
+  }
   if (converted instanceof Blob) return converted;
   return new Blob([converted], { type: 'image/jpeg' });
 }
@@ -23,13 +28,50 @@ function mergeFilesIntoInput(input, incomingFiles) {
 
   const dt = new DataTransfer();
   if (input.multiple) {
-    Array.from(input.files || []).forEach((file) => dt.items.add(file));
     incomingFiles.forEach((file) => dt.items.add(file));
   } else {
     dt.items.add(incomingFiles[incomingFiles.length - 1]);
   }
   input.files = dt.files;
   return true;
+}
+
+function uniqueFiles(existingFiles, newFiles) {
+  const seen = new Set();
+  const merged = [];
+  [...existingFiles, ...newFiles].forEach((file) => {
+    const key = `${file.name}__${file.size}__${file.lastModified}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(file);
+  });
+  return merged;
+}
+
+function isDocumentNotReadyError(error) {
+  const message = String(error?.message || '');
+  return error?.code === 'not-found' || message.includes('No document to update');
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function updateInventoryItemWithRetry(id, data, maxAttempts = 5) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await updateInventoryItem(id, data);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isDocumentNotReadyError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await wait(attempt * 300);
+    }
+  }
+  throw lastError;
 }
 
 // ─── Render Helpers ───
@@ -95,8 +137,11 @@ function renderToggle(field) {
 }
 
 function renderFileUpload(field) {
+  const conditionalAttr = field.conditionalOn
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
+    : '';
   return `
-    <div class="form-group">
+    <div class="form-group"${conditionalAttr}>
       <label class="form-label">${field.label}</label>
       <div class="file-upload-zone" data-upload="${field.name}">
         <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -228,44 +273,44 @@ export const renderIntakeForm = (container) => {
   // ─── File upload zones ───
   container.querySelectorAll('.file-upload-zone').forEach(zone => {
     const input = zone.querySelector('input[data-main-upload="true"]') || zone.querySelector('input[type="file"]');
-    const videoCaptureInput = zone.querySelector('input[data-video-capture="true"]');
     const captureButton = zone.querySelector('.capture-video-btn');
     const uploadName = zone.dataset.upload;
     const previewGrid = container.querySelector(`[data-previews="${uploadName}"]`);
+    let selectedFiles = Array.from(input.files || []);
 
     zone.addEventListener('click', (event) => {
       if (event.target.closest('.capture-video-btn')) return;
       input.click();
     });
 
-    if (captureButton && videoCaptureInput) {
+    if (captureButton) {
       captureButton.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        videoCaptureInput.setAttribute('accept', 'video/*');
-        videoCaptureInput.setAttribute('capture', 'environment');
-        try {
-          if (typeof videoCaptureInput.showPicker === 'function') {
-            videoCaptureInput.showPicker();
+        const pickerInput = document.createElement('input');
+        pickerInput.type = 'file';
+        pickerInput.accept = 'video/*';
+        pickerInput.setAttribute('capture', 'environment');
+
+        pickerInput.addEventListener('change', () => {
+          const capturedFiles = Array.from(pickerInput.files || []);
+          if (capturedFiles.length === 0) return;
+
+          if (input.multiple) {
+            selectedFiles = uniqueFiles(selectedFiles, capturedFiles);
           } else {
-            videoCaptureInput.click();
+            selectedFiles = [capturedFiles[capturedFiles.length - 1]];
           }
-        } catch {
-          videoCaptureInput.click();
-        }
-      });
 
-      videoCaptureInput.addEventListener('change', () => {
-        const capturedFiles = Array.from(videoCaptureInput.files || []);
-        if (capturedFiles.length === 0) return;
+          const merged = mergeFilesIntoInput(input, selectedFiles);
+          if (!merged) {
+            showToast('Video captured. Please reselect it from files if it does not appear.', 'info');
+          }
 
-        const merged = mergeFilesIntoInput(input, capturedFiles);
-        if (!merged) {
-          showToast('Video captured. Please reselect it from files if it does not appear.', 'info');
-        }
+          input.dispatchEvent(new Event('change'));
+        }, { once: true });
 
-        videoCaptureInput.value = '';
-        input.dispatchEvent(new Event('change'));
+        pickerInput.click();
       });
     }
 
@@ -273,10 +318,18 @@ export const renderIntakeForm = (container) => {
       if (!previewGrid) return;
       previewGrid.innerHTML = '';
 
+      const incoming = Array.from(input.files || []);
+      if (input.multiple) {
+        selectedFiles = uniqueFiles(selectedFiles, incoming);
+        mergeFilesIntoInput(input, selectedFiles);
+      } else {
+        selectedFiles = incoming.length > 0 ? [incoming[incoming.length - 1]] : [];
+      }
+
       let hasOversized = false;
       let hasHeicPreviewFailure = false;
 
-      for (const file of Array.from(input.files)) {
+      for (const file of selectedFiles) {
         if (file.size > MAX_FILE_SIZE_BYTES) {
           hasOversized = true;
           continue;
@@ -528,7 +581,7 @@ export const renderIntakeForm = (container) => {
                 } else {
                   updateData[`images.${field.name}`] = urls;
                 }
-                await updateInventoryItem(docId, updateData);
+                await updateInventoryItemWithRetry(docId, updateData);
               } else {
                 hadUploadFailure = true;
               }
@@ -538,7 +591,7 @@ export const renderIntakeForm = (container) => {
             }
           }
 
-          await updateInventoryItem(docId, { mediaUploadPending: hadUploadFailure });
+          await updateInventoryItemWithRetry(docId, { mediaUploadPending: hadUploadFailure });
           if (typeof window.__invalidateHomeCache === 'function') {
             window.__invalidateHomeCache();
           }

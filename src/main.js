@@ -17,6 +17,8 @@ import { renderAdminPage } from './pages/Admin.js';
 const app = document.getElementById('app');
 let topBarDocClickHandler = null;
 let lastHash = window.location.hash || '#';
+let authResolved = false;
+let authResolutionTimedOut = false;
 
 function applyPlatformClasses() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -241,6 +243,18 @@ const router = async () => {
 
     // Protected routes
     if (!user) {
+      if (!authResolved && !authResolutionTimedOut) {
+        app.innerHTML = `
+          <div class="page-header animate-enter">
+            <h1 class="text-display">Restoring Session</h1>
+            <p class="text-label">Checking your saved sign-in...</p>
+          </div>
+          <div class="page-content">
+            <div class="skeleton skeleton-card animate-enter" style="--delay:60ms"></div>
+          </div>
+        `;
+        return;
+      }
       window.location.hash = '#login';
       return;
     }
@@ -344,21 +358,21 @@ applyPlatformClasses();
 // Instead, we set a timeout: if auth hasn't resolved in 1.5s, call router() anyway
 // so the user sees SOMETHING instead of a blank green screen.
 
-let authResolved = false;
-
 onAuthStateChanged(auth, (user) => {
   authResolved = true;
+  authResolutionTimedOut = true;
   if (user) {
     syncUserProfile(user).catch(err => console.error('Sync profile error:', err));
   }
   router();
 });
 
-// Failsafe: If onAuthStateChanged hasn't fired after 1.5s, render the app anyway
+// Failsafe: If onAuthStateChanged is too slow, let routing continue gracefully.
 // This prevents the infinite green screen when opening the PWA offline
 setTimeout(() => {
   if (!authResolved) {
-    console.warn('Auth did not resolve in 1.5s, rendering app shell anyway.');
+    authResolutionTimedOut = true;
+    console.warn('Auth restore is slow, showing fallback routing after timeout.');
     router();
   }
-}, 1500);
+}, 4000);

@@ -16,6 +16,65 @@ function withTimeout(promise, ms, message = "Operation timed out") {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+function expandDotNotation(data) {
+  const expanded = {};
+  Object.entries(data || {}).forEach(([key, value]) => {
+    if (!key.includes(".")) {
+      expanded[key] = value;
+      return;
+    }
+    const path = key.split(".");
+    let cursor = expanded;
+    for (let i = 0; i < path.length - 1; i++) {
+      const part = path[i];
+      if (!cursor[part] || typeof cursor[part] !== "object") {
+        cursor[part] = {};
+      }
+      cursor = cursor[part];
+    }
+    cursor[path[path.length - 1]] = value;
+  });
+  return expanded;
+}
+
+function isMissingDocError(error) {
+  const message = String(error?.message || "");
+  return error?.code === "not-found" || message.includes("No document to update");
+}
+
+function timestampToNumber(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  if (typeof ts.seconds === "number") return ts.seconds * 1000;
+  const numeric = Number(ts);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function listSignature(items) {
+  return (items || [])
+    .map((item) => [
+      item.id,
+      timestampToNumber(item.updated_at),
+      timestampToNumber(item.created_at),
+      item.status || "active",
+      item.mediaUploadPending ? 1 : 0,
+      item.syncPending ? 1 : 0,
+    ].join("|"))
+    .join("::");
+}
+
+function itemSignature(item) {
+  if (!item) return "";
+  return [
+    item.id,
+    timestampToNumber(item.updated_at),
+    timestampToNumber(item.created_at),
+    item.status || "active",
+    item.mediaUploadPending ? 1 : 0,
+    item.syncPending ? 1 : 0,
+  ].join("|");
+}
+
 /**
  * Creates a new inventory item.
  * @param {Object} data The inventory property data.
@@ -32,23 +91,11 @@ export async function createInventoryItem(data) {
       created_at: serverTimestamp(),
       updated_at: serverTimestamp(),
     };
-    
-    const setPromise = setDoc(docRef, writeData);
-    
-    // Non-blocking writes for better UX
-    // If we're offline, return immediately (Firestore queues it in the background)
-    if (!navigator.onLine) {
-      return docRef.id;
-    }
-    
-    // Otherwise wait for server acknowledgment, but only for 500ms for responsiveness
-    try {
-      await withTimeout(setPromise, 500, "TIMEOUT_QUEUED");
-    } catch (e) {
-      if (e.message !== "TIMEOUT_QUEUED") throw e;
-      // If it timed out, it's still in the local queue, so it's "safe" to continue
-    }
-    
+
+    // Wait for local persistence commit so immediate follow-up writes (media URLs)
+    // do not race against document creation.
+    await setDoc(docRef, writeData);
+
     return docRef.id;
   } catch (error) {
     console.error("Error adding inventory item:", error);
@@ -78,7 +125,7 @@ export async function getInventoryItemById(id, onNewData = null) {
             if (serverSnap.exists()) {
               const serverItem = { id: serverSnap.id, ...serverSnap.data() };
               // Basic diff calculation
-              if (JSON.stringify(cachedItem) !== JSON.stringify(serverItem)) {
+              if (itemSignature(cachedItem) !== itemSignature(serverItem)) {
                 if (onNewData) onNewData(serverItem);
               }
             }
@@ -117,7 +164,9 @@ export async function getInventoryItems(filters = {}, onNewData = null) {
     let q = query(collection(db, INVENTORY_COLLECTION));
 
     // Role-based filtering: Only admins see everything. Regular users (agents) see only their own.
-    const role = await getCurrentUserRole();
+    const role = (typeof window !== "undefined" && window.userProfile?.role)
+      ? window.userProfile.role
+      : await getCurrentUserRole();
     if (role !== 'admin') {
       const uid = auth.currentUser?.uid;
       if (uid) {
@@ -146,7 +195,7 @@ export async function getInventoryItems(filters = {}, onNewData = null) {
             }));
             
             // Basic data diff logic
-            if (JSON.stringify(cachedItems) !== JSON.stringify(serverItems)) {
+            if (listSignature(cachedItems) !== listSignature(serverItems)) {
               if (onNewData) onNewData(serverItems);
             }
           }).catch(e => console.warn("Background list sync failed", e));
@@ -182,17 +231,28 @@ export async function getInventoryItems(filters = {}, onNewData = null) {
 export async function updateInventoryItem(id, data) {
   try {
     const docRef = doc(db, INVENTORY_COLLECTION, id);
-    const updatePromise = updateDoc(docRef, {
+    const writeData = {
       ...data,
       updated_at: serverTimestamp(),
-    });
-    
-    if (!navigator.onLine) return;
-    
+    };
+
     try {
+      const updatePromise = updateDoc(docRef, writeData);
       await withTimeout(updatePromise, 3000, "TIMEOUT_QUEUED");
-    } catch (e) {
-      if (e.message !== "TIMEOUT_QUEUED") throw e;
+      return;
+    } catch (updateError) {
+      if (!isMissingDocError(updateError)) {
+        if (updateError.message !== "TIMEOUT_QUEUED") throw updateError;
+        return;
+      }
+    }
+
+    const fallbackWrite = expandDotNotation(writeData);
+    const setPromise = setDoc(docRef, fallbackWrite, { merge: true });
+    try {
+      await withTimeout(setPromise, 3000, "TIMEOUT_QUEUED");
+    } catch (setError) {
+      if (setError.message !== "TIMEOUT_QUEUED") throw setError;
     }
   } catch (error) {
     console.error("Error updating inventory item:", error);

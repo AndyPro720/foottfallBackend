@@ -131,6 +131,12 @@ function buildCardHtml(item, i, userNameMap) {
   const footerMeta = [sizeLabel, floorLabel, rateLabel].join(' · ');
   const hasBackgroundUpload = Boolean(item.mediaUploadPending);
   const hasOfflineSync = Boolean(item.syncPending) && !navigator.onLine;
+  const normalizedStatus = String(item.status || 'active').toLowerCase();
+  const statusClass = normalizedStatus === 'active'
+    ? 'status-active'
+    : normalizedStatus === 'pending'
+      ? 'status-pending'
+      : 'status-inactive';
 
   return `
     <a href="#property/${item.id}" class="card card-interactive animate-enter property-card-link" style="--delay:${(i + 1) * 60}ms; text-decoration: none; display: block; color: inherit;">
@@ -162,7 +168,7 @@ function buildCardHtml(item, i, userNameMap) {
         </div>
       </div>
       <div class="card-footer" style="display:flex;align-items:center;gap:var(--space-sm)">
-        <span class="status-dot status-active"></span>
+        <span class="status-dot ${statusClass}"></span>
         <span class="text-caption">${footerMeta}</span>
         ${window.userProfile?.role === 'admin' ? `
           <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail?.split('@')[0] || userNameMap[item.createdBy] || 'Unknown Agent'}</span>
@@ -217,9 +223,11 @@ export const renderHome = async (container, options = {}) => {
     });
     const isOffline = !navigator.onLine;
     const allItems = Array.isArray(items) ? items : [];
+    const currentUid = window.userProfile?.uid || '';
     const visibleItems = allItems.filter((item) => {
       const status = String(item.status || 'active').toLowerCase();
-      return status === 'active';
+      if (status === 'active') return true;
+      return Boolean(currentUid) && item.createdBy === currentUid;
     });
 
     if (!isOffline) {
