@@ -22,8 +22,6 @@ export const SECTIONS = [
 
       { name: 'suitableFor', label: 'Suitable For', type: 'text', placeholder: 'e.g., F&B, Retail, Services' },
       { name: 'presentationAvailable', label: 'Presentation Available', type: 'toggle' },
-      { name: 'presentationLink', label: 'Presentation Link', type: 'text', placeholder: 'Paste presentation URL', conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
-      { name: 'presentationFile', label: 'Presentation Attachment', type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,image/*,video/*', multiple: true, conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
     ]
   },
   {
@@ -76,6 +74,8 @@ export const SECTIONS = [
       { name: 'interior', label: 'Interior', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'signage', label: 'Signage', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'floorPlan', label: 'Floor Plan', type: 'file', accept: 'image/*,video/*,.pdf', multiple: true },
+      { name: 'presentationLink', label: 'Presentation Link', type: 'text', placeholder: 'Paste presentation URL', conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
+      { name: 'presentationFile', label: 'Presentation Attachment', type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,image/*,video/*', multiple: true, conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
     ]
   }
 ];
