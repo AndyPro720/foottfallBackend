@@ -569,31 +569,72 @@ function attachHomeInteractions(container, renderFn) {
     };
   }
 
-  // ─── Copy Summary (real property info from SECTIONS config) ───
-  function buildFullSummary(item) {
+  // ─── Share text (matches individual property share button format) ───
+  function buildShareText(item) {
+    const googleMapsLink = String(item.googleMapsLink || '').trim();
+    const locationValue = googleMapsLink && /^https?:\/\//i.test(googleMapsLink)
+      ? googleMapsLink
+      : googleMapsLink
+        ? `https://${googleMapsLink}`
+        : String(item.location || 'Location unavailable').trim();
+    const area = item.tradeArea || 'Trade area not specified';
+    const sqft = item.size ? `${item.size} sqft` : 'Size N/A';
+    const rate = item.price ? `₹${item.price}/sqft` : 'Rate N/A';
+    const link = `${window.location.origin}/#property/${item.id}`;
+    return [
+      `Property: ${item.name || 'Unnamed Property'}`,
+      `Trade Area: ${area}`,
+      `Location: ${locationValue}`,
+      `Size: ${sqft}`,
+      `Rate: ${rate}`,
+      link
+    ].join('\n');
+  }
+
+  // ─── Copy Summary text (matches individual property copy summary format) ───
+  function buildCopySummary(item) {
     const propertySection = SECTIONS.find(s => s.id === 'property-info');
-    const specsSection = SECTIONS.find(s => s.id === 'specs');
-    const contactSection = SECTIONS.find(s => s.id === 'contact');
-    const lines = [`▎ ${item.name || 'Unnamed Property'}`];
-    const allSections = [propertySection, specsSection, contactSection].filter(Boolean);
-    allSections.forEach(section => {
-      section.fields.forEach(field => {
-        if (field.type === 'file') return;
-        if (field.name === 'googleMapsLink' || field.name === 'location') return;
-        const raw = item[field.name];
-        if (raw === undefined || raw === null || raw === '') return;
-        let val = raw;
-        if (field.type === 'number') { const n = Number(raw); val = Number.isFinite(n) ? n.toLocaleString('en-IN') : raw; }
-        if (field.type === 'toggle') val = raw === 'yes' ? 'Yes' : 'No';
-        const suffix = field.name === 'size' ? ' sqft' : field.name === 'price' ? '/sqft' : '';
-        lines.push(`  ${field.label}: ${val}${suffix}`);
-      });
+    if (!propertySection) {
+      return `${item.name || 'Unnamed Property'}`;
+    }
+
+    const googleMapsLink = String(item.googleMapsLink || '').trim();
+    const locationValue = googleMapsLink && /^https?:\/\//i.test(googleMapsLink)
+      ? googleMapsLink
+      : googleMapsLink
+        ? `https://${googleMapsLink}`
+        : String(item.location || '').trim() || 'N/A';
+
+    const lines = [];
+    propertySection.fields.forEach(field => {
+      if (field.name === 'googleMapsLink' || field.name === 'location') return;
+
+      if (field.type === 'file') {
+        const files = item.images?.[field.name] || [];
+        if (files.length > 0) {
+          lines.push(`${field.label}: ${files.length} file(s)`);
+        }
+        return;
+      }
+
+      const rawValue = item[field.name];
+      if (rawValue === undefined || rawValue === null || rawValue === '') return;
+
+      let value = rawValue;
+      if (field.type === 'number') {
+        const num = Number(rawValue);
+        value = Number.isFinite(num) ? num.toLocaleString('en-IN') : rawValue;
+      }
+      if (field.type === 'toggle') value = rawValue === 'yes' ? 'true' : 'false';
+
+      const suffix = field.name === 'size' ? ' sqft' : '';
+      lines.push(`${field.label}: ${value}${suffix}`);
     });
-    // Location
-    const loc = String(item.tradeArea || item.location || '').trim();
-    if (loc) lines.push(`  Location: ${loc}`);
-    lines.push(`  🔗 ${window.location.origin}/#property/${item.id}`);
-    return lines.join('\n');
+
+    lines.push(`Location Details: ${locationValue}`);
+
+    const header = item.name || 'Unnamed Property';
+    return `${header}\n\n${lines.join('\n')}`;
   }
 
   const btnCopy = document.getElementById('btn-batch-copy');
@@ -601,7 +642,7 @@ function attachHomeInteractions(container, renderFn) {
     btnCopy.onclick = async () => {
       if (selectedPropertyIds.size === 0) return;
       const items = cachedItems.filter(i => selectedPropertyIds.has(i.id));
-      const text = items.map(buildFullSummary).join('\n\n━━━━━━━━━━━━━━━━━━━━\n\n');
+      const text = items.map(buildCopySummary).join('\n\n━━━━━━━━━━━━━━━━━━━━\n\n');
       import('../utils/ui.js').then(async ({ showToast }) => {
         try {
           await navigator.clipboard.writeText(text);
@@ -618,7 +659,7 @@ function attachHomeInteractions(container, renderFn) {
     btnShare.onclick = async () => {
       if (selectedPropertyIds.size === 0) return;
       const items = cachedItems.filter(i => selectedPropertyIds.has(i.id));
-      const text = items.map(buildFullSummary).join('\n\n━━━━━━━━━━━━━━━━━━━━\n\n');
+      const text = items.map(buildShareText).join('\n\n---\n\n');
       import('../utils/ui.js').then(async ({ showToast }) => {
         try {
           if (navigator.share) {
