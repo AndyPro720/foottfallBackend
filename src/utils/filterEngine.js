@@ -116,6 +116,9 @@ function matchesSearch(item, query) {
     item.tradeArea,
     item.location,
     item.suitableFor,
+    item.frontage,
+    item.vicinityBrands,
+    item.miscNotes,
   ];
   return fields.some(f => safeString(f).includes(q));
 }

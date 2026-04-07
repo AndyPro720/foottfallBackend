@@ -8,6 +8,9 @@ export const SECTIONS = [
     collapsed: false,
     fields: [
       { name: 'name', label: 'Property Name', type: 'text', required: true, placeholder: 'e.g., Phoenix Mall Unit 204' },
+      { name: 'frontage', label: 'Frontage (ft)', type: 'text', placeholder: 'e.g., 25 ft' },
+      { name: 'vicinityBrands', label: 'Vicinity Brands', type: 'text', placeholder: 'e.g., Starbucks, Zara, H&M' },
+      { name: 'miscNotes', label: 'Misc Notes', type: 'text', placeholder: 'Any additional notes...' },
       { name: 'propertyStatus', label: 'Property Status', type: 'select', options: ['Occupied', 'Available', 'Under Construction'], required: false },
       { name: 'completionTime', label: 'Completion Time (Months)', type: 'number', placeholder: 'Months to completion', conditionalOn: { field: 'propertyStatus', value: 'Under Construction' } },
       { name: 'partOC', label: 'Part OC', type: 'text', placeholder: 'e.g., Expected / Available / N/A', conditionalOn: { field: 'propertyStatus', value: 'Under Construction' } },

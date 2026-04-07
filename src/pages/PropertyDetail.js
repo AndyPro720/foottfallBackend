@@ -349,6 +349,13 @@ export const renderPropertyDetail = async (container, id) => {
               ? `<a href="${priorityMapLink}" target="_blank" rel="noopener" class="text-label card-location-link">${priorityLocationLabel || 'Open location'}</a>`
               : `<p class="text-label">${priorityLocationLabel || 'No location'}</p>`
             }
+            ${(item.frontage || item.vicinityBrands || item.miscNotes) ? `
+              <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
+                ${item.frontage ? `<span class="badge" style="font-size:11px;">⬛ ${item.frontage}</span>` : ''}
+                ${item.vicinityBrands ? `<span class="badge" style="font-size:11px;">📍 ${item.vicinityBrands}</span>` : ''}
+              </div>
+              ${item.miscNotes ? `<p class="text-caption" style="margin-top:6px; color:var(--text-tertiary); font-style:italic;">${item.miscNotes}</p>` : ''}
+            ` : ''}
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px">
             <div class="status-select-wrapper" style="position:relative">
