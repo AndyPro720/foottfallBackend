@@ -10,7 +10,13 @@ service cloud.firestore {
 
     // Helper: Check if user is admin
     function isAdmin() {
-      return getUser().role == 'admin';
+      let role = getUser().role;
+      return role == 'admin' || role == 'superadmin';
+    }
+
+    // Helper: Check if user is superadmin
+    function isSuperAdmin() {
+      return getUser().role == 'superadmin';
     }
 
     // Helper: Check if user is active
@@ -20,33 +26,54 @@ service cloud.firestore {
 
     // Rules for Users collection
     match /users/{userId} {
-      // Owners can read/write their own profile
-      // Admins can manage all user profiles (needed for approval)
+      // Owners can read their own profile. Admins can read all.
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      
+      // Update logic protects superadmin status and privileges
+      allow update: if request.auth != null && (
+        isSuperAdmin() || 
+        (
+          isAdmin() && !isSuperAdmin() &&
+          // Admin cannot modify a superadmin
+          resource.data.role != 'superadmin' &&
+          // Admin cannot promote someone to superadmin
+          request.resource.data.role != 'superadmin'
+        ) ||
+        (
+          request.auth.uid == userId && 
+          // Users can update their own profile EXCEPT role and status
+          request.resource.data.role == resource.data.role && 
+          request.resource.data.status == resource.data.status
+        )
+      );
+      
       allow create: if request.auth != null && request.auth.uid == userId;
-      allow delete: if request.auth != null && isAdmin();
+      allow delete: if request.auth != null && isSuperAdmin();
+    }
+
+    // Rules for Invites collection
+    match /invites/{emailId} {
+      // Only superadmin can create or delete invites
+      allow write: if request.auth != null && isSuperAdmin();
+      // Allow read to superadmin AND the user themselves
+      allow read: if request.auth != null;
     }
 
     // Rules for Inventory collection
     match /inventory/{itemId} {
-      // Create: user must be authenticated and ACTIVE
       allow create: if request.auth != null && isActive();
       
-      // Read: owner or admin
       allow read: if request.auth != null && (
         resource.data.createdBy == request.auth.uid || 
         isAdmin()
       );
       
-      // Update/Delete: owner or admin (AND ACTIVE)
       allow update, delete: if request.auth != null && isActive() && (
         resource.data.createdBy == request.auth.uid || 
         isAdmin()
       );
     }
     
-    // Default deny
     match /{document=**} {
       allow read, write: if false;
     }

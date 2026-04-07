@@ -77,7 +77,7 @@ function renderTopBar() {
                   </div>
                   <p class="text-caption">${user.email}</p>
                 </div>
-                ${window.userProfile?.role === 'admin' ? `
+                ${['admin', 'superadmin'].includes(window.userProfile?.role) ? `
                   <a href="#admin" class="btn-secondary dropdown-action" style="display:block; text-align:center; text-decoration:none">Admin Panel</a>
                 ` : ''}
                 <button class="btn-primary dropdown-action" id="pwa-install-btn" style="display: ${deferredPrompt ? 'inline-flex' : 'none'};">
@@ -278,7 +278,7 @@ const router = async () => {
     }
 
     // Approval Gate: Only let active users proceed to inventory, keep admins free
-    if (window.userProfile?.status !== 'active' && window.userProfile?.role !== 'admin') {
+    if (window.userProfile?.status !== 'active' && !['admin', 'superadmin'].includes(window.userProfile?.role)) {
        renderPendingScreen(app);
        return;
     }
@@ -289,7 +289,7 @@ const router = async () => {
       const renderIntakeForm = await lazyIntakeForm();
       renderIntakeForm(app);
     } else if (hash === '#admin') {
-      if (window.userProfile?.role === 'admin') {
+      if (['admin', 'superadmin'].includes(window.userProfile?.role)) {
         const renderAdminPage = await lazyAdminPage();
         await renderAdminPage(app);
       } else {

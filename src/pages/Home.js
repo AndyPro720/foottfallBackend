@@ -131,7 +131,7 @@ function buildCardHtml(item, i, userNameMap) {
       <div class="card-footer" style="display:flex;align-items:center;gap:var(--space-sm)">
         <span class="status-dot ${statusClass}"></span>
         <span class="text-caption">${footerMeta}</span>
-        ${window.userProfile?.role === 'admin' ? `
+        ${['admin', 'superadmin'].includes(window.userProfile?.role) ? `
           <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail?.split('@')[0] || userNameMap[item.createdBy] || 'Unknown Agent'}</span>
         ` : ''}
       </div>
@@ -244,7 +244,7 @@ function renderChipBar(facets) {
 
 function renderAdvancedFilterPanel(facets) {
   const s = filterState;
-  const isAdmin = window.userProfile?.role === 'admin';
+  const isAdmin = ['admin', 'superadmin'].includes(window.userProfile?.role);
 
   return `
     <div class="filter-overlay" id="filter-overlay"></div>
@@ -548,7 +548,7 @@ function attachHomeInteractions(container, renderFn) {
       if (selectedPropertyIds.size === 0) return;
       const ids = Array.from(selectedPropertyIds);
       const uid = window.userProfile?.uid;
-      const isAdmin = window.userProfile?.role === 'admin';
+      const isAdmin = ['admin', 'superadmin'].includes(window.userProfile?.role);
       const unauthorized = cachedItems.filter(i => selectedPropertyIds.has(i.id) && i.createdBy !== uid && !isAdmin);
       if (unauthorized.length > 0) {
         import('../utils/ui.js').then(({ showToast }) => showToast(`No permission to delete ${unauthorized.length} properties`, 'error'));
@@ -1110,7 +1110,7 @@ export const renderHome = async (container, options = {}) => {
     }
 
     // Admin user name map
-    if (window.userProfile?.role === 'admin') {
+    if (['admin', 'superadmin'].includes(window.userProfile?.role)) {
       try {
         const users = await getAllUsers();
         users.forEach(u => {

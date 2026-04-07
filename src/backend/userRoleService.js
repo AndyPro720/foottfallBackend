@@ -1,5 +1,5 @@
 import { db, auth } from './firebaseConfig';
-import { doc, getDoc, getDocFromCache, setDoc, getDocs, collection, query, orderBy, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocFromCache, setDoc, getDocs, collection, query, orderBy, serverTimestamp, updateDoc, writeBatch, deleteDoc, where, limit } from 'firebase/firestore';
 
 let profileCache = null;
 let profileCacheUid = '';
@@ -58,12 +58,40 @@ export async function syncUserProfile(user) {
     const userSnap = await getDoc(userDocRef);
     
     if (!userSnap.exists()) {
+      let role = 'agent';
+      let status = 'pending';
+
+      // Bootstrap superadmin
+      if (user.email === 'trancidence@gmail.com') {
+        const q = query(collection(db, 'users'), where('role', '==', 'superadmin'), limit(1));
+        const superadminSnap = await getDocs(q);
+        if (superadminSnap.empty) {
+          role = 'superadmin';
+          status = 'active';
+        }
+      }
+
+      // Check for pre-approval invite
+      if (status === 'pending' && user.email) {
+        try {
+          // Normalizing email to lowercase to match invite IDs safely
+          const inviteRef = doc(db, 'invites', user.email.toLowerCase());
+          const inviteSnap = await getDoc(inviteRef);
+          if (inviteSnap.exists()) {
+            status = 'active';
+            await deleteDoc(inviteRef); // Consume the invite
+          }
+        } catch(e) {
+          console.warn("Could not check invites", e);
+        }
+      }
+
       const userData = {
         uid: user.uid,
         email: user.email,
         displayName: user.displayName || '',
-        role: 'agent', // Default role
-        status: 'pending', // All new users start as pending
+        role: role,
+        status: status,
         createdAt: serverTimestamp(),
         lastLogin: serverTimestamp()
       };
@@ -162,6 +190,39 @@ export async function getAllUsers() {
 export async function updateUserStatus(uid, status) {
   const userRef = doc(db, 'users', uid);
   return updateDoc(userRef, { status, updatedAt: serverTimestamp() });
+}
+
+/**
+ * Superadmin: Transfer superadmin ownership
+ */
+export async function transferSuperadmin(targetUid) {
+  const currentUid = auth.currentUser?.uid;
+  if (!currentUid) throw new Error("Unauthenticated");
+  
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'users', targetUid), { role: 'superadmin', updatedAt: serverTimestamp() });
+  batch.update(doc(db, 'users', currentUid), { role: 'admin', updatedAt: serverTimestamp() });
+  return batch.commit();
+}
+
+/**
+ * Superadmin: Remove a user completely
+ */
+export async function removeUser(uid) {
+  return deleteDoc(doc(db, 'users', uid));
+}
+
+/**
+ * Superadmin: Create an invite (pre-approve email)
+ */
+export async function createInvite(email) {
+  if (!email) return;
+  const inviteRef = doc(db, 'invites', email.toLowerCase());
+  return setDoc(inviteRef, {
+    email: email.toLowerCase(),
+    createdAt: serverTimestamp(),
+    createdBy: auth.currentUser?.uid || 'unknown'
+  });
 }
 
 /**

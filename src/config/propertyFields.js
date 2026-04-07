@@ -43,6 +43,7 @@ export const SECTIONS = [
     collapsed: true,
     fields: [
       { name: 'price', label: 'Price per Sq Ft (₹)', type: 'number', required: false, placeholder: '₹/sqft' },
+      { name: 'mergable', label: 'Mergable (Expandable Sq Ft)', type: 'toggle' },
       { name: 'mezzanine', label: 'Mezzanine Available', type: 'toggle' },
       { name: 'mezzanineSize', label: 'Mezzanine Size (sq ft)', type: 'number', placeholder: 'Size in sqft', conditionalOn: { field: 'mezzanine', value: 'yes' } },
       { name: 'clearHeight', label: 'Total Clear Height (ft)', type: 'number', placeholder: 'Floor to ceiling' },

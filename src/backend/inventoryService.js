@@ -167,7 +167,7 @@ export async function getInventoryItems(filters = {}, onNewData = null) {
     const role = (typeof window !== "undefined" && window.userProfile?.role)
       ? window.userProfile.role
       : await getCurrentUserRole();
-    if (role !== 'admin') {
+    if (role !== 'admin' && role !== 'superadmin') {
       const uid = auth.currentUser?.uid;
       if (uid) {
         q = query(q, where("createdBy", "==", uid));
