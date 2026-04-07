@@ -3,6 +3,7 @@ import { SECTIONS } from '../config/propertyFields.js';
 
 const VIDEO_FILE_RE = /\.(mp4|webm|mov|avi|mkv)(\?|$)/i;
 const PDF_FILE_RE = /\.pdf(\?|$)/i;
+const DOC_FILE_RE = /\.(ppt|pptx|doc|docx|xls|xlsx)(\?|$)/i;
 
 function isVideoUrl(url) {
   return VIDEO_FILE_RE.test(String(url || ''));
@@ -10,6 +11,10 @@ function isVideoUrl(url) {
 
 function isPdfUrl(url) {
   return PDF_FILE_RE.test(String(url || ''));
+}
+
+function isDocUrl(url) {
+  return DOC_FILE_RE.test(String(url || ''));
 }
 
 function getNormalizedGoogleMapLink(item) {
@@ -318,7 +323,13 @@ export const renderPropertyDetail = async (container, id) => {
                            <span class="text-label">PDF Document</span>
                            <span class="text-caption">Tap to open PDF</span>
                          </div>`
-                      : `<img src="${m.url}" loading="eager" />`
+                      : isDocUrl(m.url)
+                        ? `<div style="height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg-raised); gap:var(--space-md)">
+                             <svg width="48" height="48" fill="none" stroke="var(--accent-green)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                             <span class="text-label">Document</span>
+                             <span class="text-caption">Tap to view</span>
+                           </div>`
+                        : `<img src="${m.url}" loading="eager" />`
                   }
                 </div>
               `).join('')
@@ -349,12 +360,9 @@ export const renderPropertyDetail = async (container, id) => {
               ? `<a href="${priorityMapLink}" target="_blank" rel="noopener" class="text-label card-location-link">${priorityLocationLabel || 'Open location'}</a>`
               : `<p class="text-label">${priorityLocationLabel || 'No location'}</p>`
             }
-            ${(item.frontage || item.vicinityBrands || item.miscNotes) ? `
-              <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;">
-                ${item.frontage ? `<span class="badge" style="font-size:11px;">⬛ ${item.frontage}</span>` : ''}
-                ${item.vicinityBrands ? `<span class="badge" style="font-size:11px;">📍 ${item.vicinityBrands}</span>` : ''}
-              </div>
-              ${item.miscNotes ? `<p class="text-caption" style="margin-top:6px; color:var(--text-tertiary); font-style:italic;">${item.miscNotes}</p>` : ''}
+            ${(item.vicinityBrands || item.miscNotes) ? `
+              ${item.vicinityBrands ? `<p class="text-caption" style="margin-top:6px; color:var(--text-secondary);">📍 ${item.vicinityBrands}</p>` : ''}
+              ${item.miscNotes ? `<p class="text-caption" style="margin-top:4px; color:var(--text-tertiary); font-style:italic;">${item.miscNotes}</p>` : ''}
             ` : ''}
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px">
@@ -492,8 +500,13 @@ export const renderPropertyDetail = async (container, id) => {
     // ─── Lightbox logic ───
 
     window.openLightbox = (src) => {
-      if (isPdfUrl(src)) {
-        window.open(src, '_blank', 'noopener');
+      if (isPdfUrl(src) || isDocUrl(src)) {
+        // iOS can't download docs natively — open via Google Docs Viewer for PPT/DOC
+        if (isDocUrl(src)) {
+          window.open(`https://docs.google.com/gview?url=${encodeURIComponent(src)}&embedded=false`, '_blank', 'noopener');
+        } else {
+          window.open(src, '_blank', 'noopener');
+        }
         return;
       }
 
@@ -564,7 +577,8 @@ function renderPhotoGallery(item) {
     { key: 'interior', label: 'Interior' },
     { key: 'signage', label: 'Signage' },
     { key: 'floorPlan', label: 'Floor Plan' },
-    { key: 'entryToBuilding', label: 'Entry to Building' }
+    { key: 'entryToBuilding', label: 'Entry to Building' },
+    { key: 'presentationFile', label: 'Presentation' },
   ];
 
   const categoriesHtml = photoCategories.map(cat => {
@@ -576,13 +590,16 @@ function renderPhotoGallery(item) {
         <p class="text-label" style="margin-bottom: var(--space-xs); font-weight: 600; color: var(--text-secondary)">${cat.label}</p>
         <div class="photo-scroll-row">
           ${urls.map(url => `
-            <div class="photo-row-item" onclick="window.openLightbox('${url}')">
-              ${isVideoUrl(url)
-                ? `<video src="${url}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
-                : isPdfUrl(url)
-                  ? `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--bg-raised)"><svg width="24" height="24" fill="none" stroke="var(--text-tertiary)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div>`
-                  : `<img src="${url}" loading="lazy" />`
-              }
+            <div class="photo-row-item" onclick="window.openLightbox('${url}')"
+               ${isDocUrl(url) || isPdfUrl(url) ? 'style="cursor:pointer;"' : ''}>
+               ${isVideoUrl(url)
+                 ? `<video src="${url}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
+                 : isPdfUrl(url)
+                   ? `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-raised);gap:4px"><svg width="24" height="24" fill="none" stroke="var(--text-tertiary)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><span class="text-caption" style="font-size:10px">PDF</span></div>`
+                   : isDocUrl(url)
+                     ? `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-raised);gap:4px"><svg width="24" height="24" fill="none" stroke="var(--accent-green)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><span class="text-caption" style="font-size:10px">Open Doc</span></div>`
+                     : `<img src="${url}" loading="lazy" />`
+               }
             </div>
           `).join('')}
         </div>
@@ -590,7 +607,17 @@ function renderPhotoGallery(item) {
     `;
   }).join('');
 
-  if (!categoriesHtml) return '';
+  // Presentation link (not a file category, rendered separately)
+  const presLinkHtml = item.presentationAvailable && item.presentationLink ? `
+    <div style="margin-bottom: var(--space-md)">
+      <p class="text-label" style="margin-bottom: var(--space-xs); font-weight: 600; color: var(--text-secondary)">Presentation Link</p>
+      <a href="${item.presentationLink}" target="_blank" rel="noopener" class="link-primary" style="font-size:13px; word-break:break-all;">
+        ${item.presentationLink}
+      </a>
+    </div>
+  ` : '';
+
+  if (!categoriesHtml && !presLinkHtml) return '';
 
   return `
     <div class="card animate-enter" style="margin-bottom: var(--space-md)">
@@ -599,6 +626,7 @@ function renderPhotoGallery(item) {
       </div>
       <div class="card-body">
         ${categoriesHtml}
+        ${presLinkHtml}
       </div>
     </div>
   `;

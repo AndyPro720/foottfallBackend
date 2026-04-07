@@ -15,7 +15,8 @@
   "license": "ISC",
   "dependencies": {
     "firebase": "^12.11.0",
-    "heic-to": "^1.4.2"
+    "heic-to": "^1.4.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "sharp": "^0.34.5",

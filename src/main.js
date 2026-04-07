@@ -350,8 +350,22 @@ VITE_FIREBASE_APP_ID=your_app_id</pre>
   }
 
   if (hash === '#') {
+    // Defer scroll restoration: renderHome is async, so wait for next paint
     const savedScroll = Number(sessionStorage.getItem('home-scroll-y') || 0);
-    window.scrollTo({ top: Number.isFinite(savedScroll) ? savedScroll : 0, left: 0, behavior: 'auto' });
+    if (savedScroll > 0) {
+      // Use double-rAF to ensure DOM has painted (critical on iOS WebKit)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          window.scrollTo({ top: savedScroll, left: 0, behavior: 'auto' });
+        });
+      });
+      // Fallback: also try after a short delay for iOS PWA
+      setTimeout(() => {
+        if (Math.abs(window.scrollY - savedScroll) > 50) {
+          window.scrollTo({ top: savedScroll, left: 0, behavior: 'auto' });
+        }
+      }, 300);
+    }
   } else {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
