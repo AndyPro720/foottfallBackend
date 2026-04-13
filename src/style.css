@@ -2121,3 +2121,140 @@ body.ios-pwa {
   transition: background 0.15s;
 }
 .batch-status-opt:hover { background: rgba(255,255,255,0.05); }
+
+/* ========== CREATABLE SELECT DROPDOWN ========== */
+
+.cs-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.cs-input {
+  padding-right: 36px !important;
+  cursor: text;
+}
+
+.cs-arrow {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  z-index: 1;
+  transition: transform var(--transition-fast), color var(--transition-fast);
+  pointer-events: auto;
+}
+
+.cs-active .cs-arrow {
+  transform: translateY(-50%) rotate(180deg);
+  color: var(--accent-green);
+}
+
+.cs-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-md);
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 200;
+  display: none;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hover) transparent;
+}
+
+.cs-dropdown.cs-open {
+  display: block;
+  animation: csFadeIn 0.15s ease;
+}
+
+@keyframes csFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cs-opt {
+  padding: 10px var(--space-md);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-opt:hover,
+.cs-opt.cs-hl {
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.cs-opt strong {
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.cs-create {
+  color: var(--accent-green);
+  border-top: 1px solid var(--border-default);
+  font-weight: 500;
+}
+
+.cs-empty {
+  padding: 12px var(--space-md);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* ── Filter panel add row ── */
+
+.filter-add-row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: stretch;
+  margin-bottom: var(--space-sm);
+}
+
+.filter-add-row .cs-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-add-row .form-input {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.filter-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  background: transparent;
+  color: var(--accent-green);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--accent-green);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  min-height: 40px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.filter-add-btn:hover {
+  background: var(--accent-green);
+  color: var(--bg-base);
+}

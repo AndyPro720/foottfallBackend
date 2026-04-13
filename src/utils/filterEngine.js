@@ -143,9 +143,9 @@ function matchesFilters(item, state) {
     if (!state.propertyStatuses.some(s => safeString(s) === itemStatus)) return false;
   }
 
-  // City (OR within category)
+  // City (OR within category) — uses inferred city for legacy data
   if (state.cities.length > 0) {
-    const itemCity = safeString(item.city);
+    const itemCity = safeString(inferCity(item));
     if (!state.cities.some(c => safeString(c) === itemCity)) return false;
   }
 
@@ -255,6 +255,28 @@ export function applyFilters(items, state) {
 // ─── Facet Extraction (for dynamic chip generation) ───
 
 /**
+ * Default city for properties that have a tradeArea but no city.
+ * The user confirmed ~90% of legacy trade areas belong to Pune.
+ * Non-Pune trade areas can be listed separately as they are identified.
+ */
+const NON_PUNE_TRADE_AREAS = {
+  // 'Bandra': 'Mumbai',
+  // 'Andheri': 'Mumbai',
+  // Add known non-Pune trade areas here as needed
+};
+
+function inferCity(item) {
+  const explicit = String(item.city || '').trim();
+  if (explicit) return explicit;
+  const ta = String(item.tradeArea || '').trim();
+  if (!ta) return '';
+  // Check the exceptions map first
+  if (NON_PUNE_TRADE_AREAS[ta]) return NON_PUNE_TRADE_AREAS[ta];
+  // Default: if property has a trade area but no city, it's Pune
+  return 'Pune';
+}
+
+/**
  * Extract unique values for faceted chip generation.
  * @param {Object[]} items - All property items (unfiltered)
  * @returns {Object} Facet values for UI generation
@@ -267,7 +289,7 @@ export function extractFacets(items) {
   const cityTradeAreaMap = {};
 
   items.forEach(item => {
-    const city = String(item.city || '').trim();
+    const city = inferCity(item);
     if (city) {
       cities.add(city);
       if (!cityTradeAreaMap[city]) cityTradeAreaMap[city] = new Set();
@@ -288,7 +310,7 @@ export function extractFacets(items) {
     if (ps) propertyStatuses.add(ps);
   });
 
-  // Convert sets to arrays in the map
+  // Convert sets to sorted arrays
   const finalCityMap = {};
   for (const c in cityTradeAreaMap) {
     finalCityMap[c] = [...cityTradeAreaMap[c]].sort();

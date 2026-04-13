@@ -5,6 +5,7 @@ import { SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 import { extractFacets } from '../utils/filterEngine.js';
+import { initCreatableSelect } from '../utils/creatableSelect.js';
 
 const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i;
@@ -84,10 +85,10 @@ async function updateInventoryItemWithRetry(id, data, maxAttempts = 5) {
 
 // Render helpers (reused from IntakeForm)
 
-function renderField(field, value, facets = {}) {
+function renderField(field, value) {
   let html = '';
   if (field.type === 'select') html = renderSelect(field, value);
-  else if (field.type === 'creatable-select') html = renderCreatableSelect(field, value, facets);
+  else if (field.type === 'creatable-select') html = renderCreatableSelect(field, value);
   else if (field.type === 'toggle') html = renderToggle(field, value);
   else if (field.type === 'file') html = renderFileUpload(field, value);
   else html = renderTextField(field, value);
@@ -149,29 +150,16 @@ function renderSelect(field, value = '') {
   `;
 }
 
-function renderCreatableSelect(field, value = '', facets = {}) {
+function renderCreatableSelect(field, value = '') {
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
     : '';
-  
-  let datalistId = `${field.name}-options`;
-  let defaultOptions = [];
-  
-  if (field.name === 'city' && facets.cities) {
-    defaultOptions = facets.cities;
-  } else if (field.name === 'tradeArea' && facets.tradeAreas) {
-    defaultOptions = facets.tradeAreas;
-  }
-  
   return `
     <div class="form-group"${conditionalAttr}>
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
-      <input class="form-input form-creatable-select" type="text" id="${field.name}" name="${field.name}"
-             list="${datalistId}" value="${value}"
+      <input class="form-input" type="text" id="${field.name}" name="${field.name}"
+             value="${value || ''}"
              placeholder="${field.placeholder || 'Type or select...'}" ${field.required ? 'required' : ''} autocomplete="off" />
-      <datalist id="${datalistId}">
-        ${defaultOptions.map(o => `<option value="${o}"></option>`).join('')}
-      </datalist>
     </div>
   `;
 }
@@ -285,7 +273,7 @@ export const renderEditProperty = async (container, id) => {
       <div class="form-section-body">
         ${section.fields.map(field => {
           const val = field.type === 'file' ? (item.images?.[field.name] || []) : item[field.name];
-          return renderField(field, val, facets);
+          return renderField(field, val);
         }).join('')}
       </div>
     </div>
@@ -342,26 +330,30 @@ export const renderEditProperty = async (container, id) => {
     });
   });
 
-  // ─── Dependent Autocomplete Logic (City -> Trade Area) ───
+  // ─── Creatable Select Dropdowns (City → Trade Area dependency) ───
   const cityInput = container.querySelector('#city');
-  const tradeAreaDatalist = container.querySelector('#tradeArea-options');
-  if (cityInput && tradeAreaDatalist) {
-    // Initial setup for edit state based on loaded property
-    const initialCity = item?.city || '';
-    if (initialCity) {
-      const initialTradeAreas = cityTradeAreaMap[initialCity] || facets.tradeAreas || [];
-      tradeAreaDatalist.innerHTML = initialTradeAreas.map(ta => `<option value="${ta}"></option>`).join('');
-    }
+  const tradeAreaInput = container.querySelector('#tradeArea');
+  let cityCS = null;
+  let tradeAreaCS = null;
 
-    cityInput.addEventListener('input', (e) => {
-      const selectedCity = e.target.value.trim();
-      const validTradeAreas = cityTradeAreaMap[selectedCity] || [];
-      if (validTradeAreas.length > 0) {
-        tradeAreaDatalist.innerHTML = validTradeAreas.map(ta => `<option value="${ta}"></option>`).join('');
-      } else {
-        tradeAreaDatalist.innerHTML = (facets.tradeAreas || []).map(ta => `<option value="${ta}"></option>`).join('');
+  if (cityInput) {
+    cityCS = initCreatableSelect(cityInput, facets.cities || [], {
+      onChange(selectedCity) {
+        if (tradeAreaCS) {
+          const validAreas = cityTradeAreaMap[selectedCity] || facets.tradeAreas || [];
+          tradeAreaCS.setOptions(validAreas);
+        }
       }
     });
+  }
+
+  if (tradeAreaInput) {
+    // Pre-filter trade areas by current city if one is set
+    const currentCity = item?.city || '';
+    const initialAreas = (currentCity && cityTradeAreaMap[currentCity])
+      ? cityTradeAreaMap[currentCity]
+      : (facets.tradeAreas || []);
+    tradeAreaCS = initCreatableSelect(tradeAreaInput, initialAreas);
   }
 
   // Initialize conditional fields using current values.

@@ -65,7 +65,11 @@ function getPriorityMapLink(item) {
 
 function getPriorityLocationLabel(item) {
   const tradeArea = String(item.tradeArea || '').trim();
-  if (tradeArea) return tradeArea;
+  const city = String(item.city || '').trim();
+  const parts = [];
+  if (tradeArea) parts.push(tradeArea);
+  if (city) parts.push(city);
+  if (parts.length > 0) return parts.join(', ');
 
   const manualLocation = String(item.location || '').trim();
   if (manualLocation && !/^https?:\/\//i.test(manualLocation)) return manualLocation;

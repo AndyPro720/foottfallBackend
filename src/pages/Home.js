@@ -9,6 +9,7 @@ import {
   countActiveFilters,
   SORT_OPTIONS,
 } from '../utils/filterEngine.js';
+import { initCreatableSelect } from '../utils/creatableSelect.js';
 
 // ─── Module-Level State ───
 let cachedItems = null;       // Raw data cache (replaces homeCacheHtml)
@@ -284,29 +285,25 @@ function renderAdvancedFilterPanel(facets) {
 
         <div class="filter-section">
           <label class="filter-section-label">City</label>
-          <div style="display:flex; gap:var(--space-sm); margin-bottom:var(--space-sm)">
-            <input type="text" id="adv-city-input" class="form-input form-creatable-select" list="adv-cities-datalist" placeholder="Type city..." style="flex:1" autocomplete="off" />
-            <datalist id="adv-cities-datalist">
-              ${facets.cities.map(c => `<option value="${c}"></option>`).join('')}
-            </datalist>
-            <button class="btn-secondary btn-sm" id="adv-add-city">Add</button>
+          <div class="filter-add-row">
+            <input type="text" id="adv-city-input" class="form-input" placeholder="Search or add city..." autocomplete="off" />
+            <button class="filter-add-btn" id="adv-add-city">+ Add</button>
           </div>
           <div class="filter-chip-group filter-chip-group-wrap">
             ${s.cities.map(c => `<button class="chip chip-active" data-adv-type="city" data-adv-value="${c}">${c} &times;</button>`).join('')}
+            ${s.cities.length === 0 ? '<span class="text-caption" style="opacity:0.4">No city filter active</span>' : ''}
           </div>
         </div>
 
         <div class="filter-section">
           <label class="filter-section-label">Trade Area</label>
-          <div style="display:flex; gap:var(--space-sm); margin-bottom:var(--space-sm)">
-            <input type="text" id="adv-trade-input" class="form-input form-creatable-select" list="adv-trade-datalist" placeholder="Select trade area..." style="flex:1" autocomplete="off" />
-            <datalist id="adv-trade-datalist">
-              ${(s.cities.length > 0 ? Array.from(new Set(s.cities.flatMap(c => facets.cityTradeAreaMap?.[c] || []))) : facets.tradeAreas).map(ta => `<option value="${ta}"></option>`).join('')}
-            </datalist>
-            <button class="btn-secondary btn-sm" id="adv-add-trade">Add</button>
+          <div class="filter-add-row">
+            <input type="text" id="adv-trade-input" class="form-input" placeholder="Search or add trade area..." autocomplete="off" />
+            <button class="filter-add-btn" id="adv-add-trade">+ Add</button>
           </div>
           <div class="filter-chip-group filter-chip-group-wrap">
             ${s.tradeAreas.map(ta => `<button class="chip chip-sm chip-active" data-adv-type="tradeArea" data-adv-value="${ta}">${ta} &times;</button>`).join('')}
+            ${s.tradeAreas.length === 0 ? '<span class="text-caption" style="opacity:0.4">No trade area filter active</span>' : ''}
           </div>
         </div>
 
@@ -797,7 +794,53 @@ function attachHomeInteractions(container, renderFn) {
     document.getElementById('filter-panel-close').onclick = () => closeFilterPanel();
   }
 
-  // Advanced Filter Add Inputs
+  // ── Advanced Filter: City & Trade Area dropdowns ──
+  let advCityCS = null;
+  let advTradeCS = null;
+
+  const advCityInput = document.getElementById('adv-city-input');
+  const advTradeInput = document.getElementById('adv-trade-input');
+
+  // Compute which trade area options to show based on currently filtered cities
+  function getFilteredTradeOptions() {
+    if (!cachedItems) return [];
+    const rf = extractFacets(cachedItems);
+    if (filterState.cities.length > 0) {
+      return Array.from(new Set(filterState.cities.flatMap(c => rf.cityTradeAreaMap?.[c] || [])));
+    }
+    return rf.tradeAreas || [];
+  }
+
+  if (advCityInput) {
+    const rf = extractFacets(cachedItems || []);
+    advCityCS = initCreatableSelect(advCityInput, rf.cities || [], {
+      onChange(val) {
+        if (!val || filterState.cities.includes(val)) return;
+        filterState.cities.push(val);
+        advCityInput.value = '';
+        // Update trade area dropdown with filtered options
+        if (advTradeCS) advTradeCS.setOptions(getFilteredTradeOptions());
+        syncAdvancedInputsToState();
+        renderFn();
+        openFilterPanel();
+      }
+    });
+  }
+
+  if (advTradeInput) {
+    advTradeCS = initCreatableSelect(advTradeInput, getFilteredTradeOptions(), {
+      onChange(val) {
+        if (!val || filterState.tradeAreas.includes(val)) return;
+        filterState.tradeAreas.push(val);
+        advTradeInput.value = '';
+        syncAdvancedInputsToState();
+        renderFn();
+        openFilterPanel();
+      }
+    });
+  }
+
+  // Add buttons (fallback for explicit click on "+Add")
   const bindAdvAdd = (btnId, inputId, facetKey) => {
     const btn = document.getElementById(btnId);
     const input = document.getElementById(inputId);
@@ -806,22 +849,14 @@ function attachHomeInteractions(container, renderFn) {
       const val = input.value.trim();
       if (!val || filterState[facetKey].includes(val)) return;
       filterState[facetKey].push(val);
+      input.value = '';
+      if (facetKey === 'cities' && advTradeCS) {
+        advTradeCS.setOptions(getFilteredTradeOptions());
+      }
       syncAdvancedInputsToState();
       renderFn();
       openFilterPanel();
-      setTimeout(() => {
-        const nextInput = document.getElementById(inputId);
-        if (nextInput) {
-          nextInput.focus();
-        }
-      }, 50);
     };
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        btn.click();
-      }
-    });
   };
 
   bindAdvAdd('adv-add-city', 'adv-city-input', 'cities');

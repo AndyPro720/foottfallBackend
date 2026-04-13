@@ -5,6 +5,7 @@ import { SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 import { extractFacets } from '../utils/filterEngine.js';
+import { initCreatableSelect } from '../utils/creatableSelect.js';
 
 const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i;
@@ -112,29 +113,15 @@ function renderSelect(field) {
   `;
 }
 
-function renderCreatableSelect(field, facets = {}) {
+function renderCreatableSelect(field) {
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
     : '';
-  
-  let datalistId = `${field.name}-options`;
-  let defaultOptions = [];
-  
-  if (field.name === 'city' && facets.cities) {
-    defaultOptions = facets.cities;
-  } else if (field.name === 'tradeArea' && facets.tradeAreas) {
-    defaultOptions = facets.tradeAreas;
-  }
-  
   return `
     <div class="form-group"${conditionalAttr}>
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
-      <input class="form-input form-creatable-select" type="text" id="${field.name}" name="${field.name}"
-             list="${datalistId}"
+      <input class="form-input" type="text" id="${field.name}" name="${field.name}"
              placeholder="${field.placeholder || 'Type or select...'}" ${field.required ? 'required' : ''} autocomplete="off" />
-      <datalist id="${datalistId}">
-        ${defaultOptions.map(o => `<option value="${o}"></option>`).join('')}
-      </datalist>
     </div>
   `;
 }
@@ -190,10 +177,10 @@ function renderFileUpload(field) {
   `;
 }
 
-function renderField(field, facets) {
+function renderField(field) {
   let html = '';
   if (field.type === 'select') html = renderSelect(field);
-  else if (field.type === 'creatable-select') html = renderCreatableSelect(field, facets);
+  else if (field.type === 'creatable-select') html = renderCreatableSelect(field);
   else if (field.type === 'toggle') html = renderToggle(field);
   else if (field.type === 'file') html = renderFileUpload(field);
   else html = renderTextField(field);
@@ -248,7 +235,7 @@ export const renderIntakeForm = async (container) => {
         <span class="text-subheading">${section.title}</span>
       </div>
       <div class="form-section-body">
-        ${section.fields.map(f => renderField(f, facets)).join('')}
+        ${section.fields.map(f => renderField(f)).join('')}
       </div>
     </div>
   `).join('');
@@ -287,20 +274,26 @@ export const renderIntakeForm = async (container) => {
     });
   });
 
-  // ─── Dependent Autocomplete Logic (City -> Trade Area) ───
+  // ─── Creatable Select Dropdowns (City → Trade Area dependency) ───
   const cityInput = container.querySelector('#city');
-  const tradeAreaDatalist = container.querySelector('#tradeArea-options');
-  if (cityInput && tradeAreaDatalist) {
-    cityInput.addEventListener('input', (e) => {
-      const selectedCity = e.target.value.trim();
-      const validTradeAreas = cityTradeAreaMap[selectedCity] || [];
-      if (validTradeAreas.length > 0) {
-        tradeAreaDatalist.innerHTML = validTradeAreas.map(ta => `<option value="${ta}"></option>`).join('');
-      } else {
-        // Fallback to all trade areas if no city map found
-        tradeAreaDatalist.innerHTML = (facets.tradeAreas || []).map(ta => `<option value="${ta}"></option>`).join('');
+  const tradeAreaInput = container.querySelector('#tradeArea');
+  let cityCS = null;
+  let tradeAreaCS = null;
+
+  if (cityInput) {
+    cityCS = initCreatableSelect(cityInput, facets.cities || [], {
+      onChange(selectedCity) {
+        // When city is picked, update trade area options to only show that city's areas
+        if (tradeAreaCS) {
+          const validAreas = cityTradeAreaMap[selectedCity] || facets.tradeAreas || [];
+          tradeAreaCS.setOptions(validAreas);
+        }
       }
     });
+  }
+
+  if (tradeAreaInput) {
+    tradeAreaCS = initCreatableSelect(tradeAreaInput, facets.tradeAreas || []);
   }
 
   // ─── Toggle buttons ───
