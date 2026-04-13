@@ -8,6 +8,7 @@
  * @property {string} sortKey - One of: 'newest', 'price-asc', 'price-desc', 'size-asc', 'size-desc'
  * @property {string[]} buildingTypes - e.g. ['Mall', 'High Street']
  * @property {string[]} propertyStatuses - e.g. ['Available']
+ * @property {string[]} cities - e.g. ['Pune', 'Mumbai']
  * @property {string[]} tradeAreas - e.g. ['MG Road']
  * @property {string[]} createdByUids - admin only
  * @property {number|null} priceMin
@@ -27,6 +28,7 @@ export function createEmptyFilterState() {
     sortKey: 'newest',
     buildingTypes: [],
     propertyStatuses: [],
+    cities: [],
     tradeAreas: [],
     createdByUids: [],
     priceMin: null,
@@ -45,6 +47,7 @@ export function hasActiveFilters(state) {
   return (
     state.buildingTypes.length > 0 ||
     state.propertyStatuses.length > 0 ||
+    state.cities.length > 0 ||
     state.tradeAreas.length > 0 ||
     state.createdByUids.length > 0 ||
     state.priceMin !== null ||
@@ -63,6 +66,7 @@ export function countActiveFilters(state) {
   let count = 0;
   count += state.buildingTypes.length;
   count += state.propertyStatuses.length;
+  count += state.cities.length;
   count += state.tradeAreas.length;
   count += state.createdByUids.length;
   if (state.priceMin !== null) count++;
@@ -114,6 +118,7 @@ function matchesSearch(item, query) {
   const fields = [
     item.name,
     item.tradeArea,
+    item.city,
     item.location,
     item.suitableFor,
     item.frontage,
@@ -136,6 +141,12 @@ function matchesFilters(item, state) {
   if (state.propertyStatuses.length > 0) {
     const itemStatus = safeString(item.propertyStatus);
     if (!state.propertyStatuses.some(s => safeString(s) === itemStatus)) return false;
+  }
+
+  // City (OR within category)
+  if (state.cities.length > 0) {
+    const itemCity = safeString(item.city);
+    if (!state.cities.some(c => safeString(c) === itemCity)) return false;
   }
 
   // Trade Area (OR within category)
@@ -250,20 +261,43 @@ export function applyFilters(items, state) {
  */
 export function extractFacets(items) {
   const tradeAreas = new Set();
+  const cities = new Set();
   const buildingTypes = new Set();
   const propertyStatuses = new Set();
+  const cityTradeAreaMap = {};
 
   items.forEach(item => {
+    const city = String(item.city || '').trim();
+    if (city) {
+      cities.add(city);
+      if (!cityTradeAreaMap[city]) cityTradeAreaMap[city] = new Set();
+    }
+
     const ta = String(item.tradeArea || '').trim();
-    if (ta) tradeAreas.add(ta);
+    if (ta) {
+      tradeAreas.add(ta);
+      if (city) {
+        cityTradeAreaMap[city].add(ta);
+      }
+    }
+    
     const bt = String(item.buildingType || '').trim();
     if (bt) buildingTypes.add(bt);
+    
     const ps = String(item.propertyStatus || '').trim();
     if (ps) propertyStatuses.add(ps);
   });
 
+  // Convert sets to arrays in the map
+  const finalCityMap = {};
+  for (const c in cityTradeAreaMap) {
+    finalCityMap[c] = [...cityTradeAreaMap[c]].sort();
+  }
+
   return {
+    cities: [...cities].sort(),
     tradeAreas: [...tradeAreas].sort(),
+    cityTradeAreaMap: finalCityMap,
     buildingTypes: [...buildingTypes].sort(),
     propertyStatuses: [...propertyStatuses].sort(),
   };

@@ -21,7 +21,8 @@ export const SECTIONS = [
       { name: 'entryToBuilding', label: 'Entry to Building Photo', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'googleMapsLink', label: 'Google Map Link', type: 'text', placeholder: 'Paste Google Maps URL' },
       { name: 'location', label: 'Exact Location / Address', type: 'text', required: false, placeholder: 'Full address' },
-      { name: 'tradeArea', label: 'Trade Area', type: 'text', placeholder: 'e.g., MG Road, Connaught Place' },
+      { name: 'city', label: 'City', type: 'creatable-select', required: false, placeholder: 'e.g., Pune, Mumbai' },
+      { name: 'tradeArea', label: 'Trade Area', type: 'creatable-select', placeholder: 'e.g., MG Road, Connaught Place' },
 
       { name: 'suitableFor', label: 'Suitable For', type: 'text', placeholder: 'e.g., F&B, Retail, Services' },
       { name: 'presentationAvailable', label: 'Presentation Available', type: 'toggle' },
@@ -43,6 +44,7 @@ export const SECTIONS = [
     collapsed: true,
     fields: [
       { name: 'price', label: 'Price per Sq Ft (₹)', type: 'number', required: false, placeholder: '₹/sqft' },
+      { name: 'priceNegotiability', label: 'Price Negotiability', type: 'select', options: ['Negotiable', 'Slightly Negotiable', 'Non Negotiable', 'N/A'], required: false },
       { name: 'mergable', label: 'Mergable (Expandable Sq Ft)', type: 'toggle' },
       { name: 'mezzanine', label: 'Mezzanine Available', type: 'toggle' },
       { name: 'mezzanineSize', label: 'Mezzanine Size (sq ft)', type: 'number', placeholder: 'Size in sqft', conditionalOn: { field: 'mezzanine', value: 'yes' } },

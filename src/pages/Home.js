@@ -39,8 +39,11 @@ function formatINR(value) {
 
 function getDisplayLocation(item) {
   const tradeArea = String(item.tradeArea || '').trim();
-  if (tradeArea) return tradeArea;
-  return '';
+  const city = String(item.city || '').trim();
+  const parts = [];
+  if (tradeArea) parts.push(tradeArea);
+  if (city) parts.push(city);
+  return parts.join(', ');
 }
 
 function getMapLink(item) {
@@ -218,6 +221,12 @@ function renderChipBar(facets) {
   });
   html += `</div>`;
 
+  // City chips
+  facets.cities.forEach(c => {
+    const isActive = filterState.cities.includes(c);
+    html += `<button class="chip ${isActive ? 'chip-active' : ''}" data-chip-type="city" data-chip-value="${c}">${c}</button>`;
+  });
+
   // Building Type chips
   facets.buildingTypes.forEach(bt => {
     const isActive = filterState.buildingTypes.includes(bt);
@@ -274,12 +283,30 @@ function renderAdvancedFilterPanel(facets) {
         </div>
 
         <div class="filter-section">
-          <label class="filter-section-label">Trade Area</label>
+          <label class="filter-section-label">City</label>
+          <div style="display:flex; gap:var(--space-sm); margin-bottom:var(--space-sm)">
+            <input type="text" id="adv-city-input" class="form-input form-creatable-select" list="adv-cities-datalist" placeholder="Type city..." style="flex:1" autocomplete="off" />
+            <datalist id="adv-cities-datalist">
+              ${facets.cities.map(c => `<option value="${c}"></option>`).join('')}
+            </datalist>
+            <button class="btn-secondary btn-sm" id="adv-add-city">Add</button>
+          </div>
           <div class="filter-chip-group filter-chip-group-wrap">
-            ${facets.tradeAreas.map(ta => `
-              <button class="chip chip-sm ${s.tradeAreas.includes(ta) ? 'chip-active' : ''}" data-adv-type="tradeArea" data-adv-value="${ta}">${ta}</button>
-            `).join('')}
-            ${facets.tradeAreas.length === 0 ? '<span class="text-caption" style="opacity:0.5">No trade areas found</span>' : ''}
+            ${s.cities.map(c => `<button class="chip chip-active" data-adv-type="city" data-adv-value="${c}">${c} &times;</button>`).join('')}
+          </div>
+        </div>
+
+        <div class="filter-section">
+          <label class="filter-section-label">Trade Area</label>
+          <div style="display:flex; gap:var(--space-sm); margin-bottom:var(--space-sm)">
+            <input type="text" id="adv-trade-input" class="form-input form-creatable-select" list="adv-trade-datalist" placeholder="Select trade area..." style="flex:1" autocomplete="off" />
+            <datalist id="adv-trade-datalist">
+              ${(s.cities.length > 0 ? Array.from(new Set(s.cities.flatMap(c => facets.cityTradeAreaMap?.[c] || []))) : facets.tradeAreas).map(ta => `<option value="${ta}"></option>`).join('')}
+            </datalist>
+            <button class="btn-secondary btn-sm" id="adv-add-trade">Add</button>
+          </div>
+          <div class="filter-chip-group filter-chip-group-wrap">
+            ${s.tradeAreas.map(ta => `<button class="chip chip-sm chip-active" data-adv-type="tradeArea" data-adv-value="${ta}">${ta} &times;</button>`).join('')}
           </div>
         </div>
 
@@ -770,6 +797,36 @@ function attachHomeInteractions(container, renderFn) {
     document.getElementById('filter-panel-close').onclick = () => closeFilterPanel();
   }
 
+  // Advanced Filter Add Inputs
+  const bindAdvAdd = (btnId, inputId, facetKey) => {
+    const btn = document.getElementById(btnId);
+    const input = document.getElementById(inputId);
+    if (!btn || !input) return;
+    btn.onclick = () => {
+      const val = input.value.trim();
+      if (!val || filterState[facetKey].includes(val)) return;
+      filterState[facetKey].push(val);
+      syncAdvancedInputsToState();
+      renderFn();
+      openFilterPanel();
+      setTimeout(() => {
+        const nextInput = document.getElementById(inputId);
+        if (nextInput) {
+          nextInput.focus();
+        }
+      }, 50);
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        btn.click();
+      }
+    });
+  };
+
+  bindAdvAdd('adv-add-city', 'adv-city-input', 'cities');
+  bindAdvAdd('adv-add-trade', 'adv-trade-input', 'tradeAreas');
+
   // Advanced filter chip clicks
   container.querySelectorAll('[data-adv-type]').forEach(chip => {
     chip.onclick = () => {
@@ -784,9 +841,15 @@ function attachHomeInteractions(container, renderFn) {
       } else {
         toggleChipFilter(type, value);
       }
-      // Re-render just the panel chips to show active state
-      refreshAdvancedChipStates(container);
-      updateFilterResultCount();
+      
+      if (type === 'city' || type === 'tradeArea') {
+        syncAdvancedInputsToState();
+        renderFn();
+        openFilterPanel();
+      } else {
+        refreshAdvancedChipStates(container);
+        updateFilterResultCount();
+      }
     };
   });
 
@@ -828,6 +891,7 @@ function attachHomeInteractions(container, renderFn) {
 
 function toggleChipFilter(type, value) {
   const map = {
+    city: 'cities',
     buildingType: 'buildingTypes',
     propertyStatus: 'propertyStatuses',
     tradeArea: 'tradeAreas',

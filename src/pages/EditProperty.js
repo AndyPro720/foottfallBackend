@@ -1,9 +1,10 @@
-import { getInventoryItemById, updateInventoryItem } from '../backend/inventoryService.js';
+import { getInventoryItemById, updateInventoryItem, getInventoryItems } from '../backend/inventoryService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
 import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
 import { SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
+import { extractFacets } from '../utils/filterEngine.js';
 
 const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i;
@@ -83,9 +84,10 @@ async function updateInventoryItemWithRetry(id, data, maxAttempts = 5) {
 
 // Render helpers (reused from IntakeForm)
 
-function renderField(field, value) {
+function renderField(field, value, facets = {}) {
   let html = '';
   if (field.type === 'select') html = renderSelect(field, value);
+  else if (field.type === 'creatable-select') html = renderCreatableSelect(field, value, facets);
   else if (field.type === 'toggle') html = renderToggle(field, value);
   else if (field.type === 'file') html = renderFileUpload(field, value);
   else html = renderTextField(field, value);
@@ -143,6 +145,33 @@ function renderSelect(field, value = '') {
         <option value="" disabled ${!value ? 'selected' : ''}>Select...</option>
         ${field.options.map(o => `<option value="${o}" ${o === value ? 'selected' : ''}>${o}</option>`).join('')}
       </select>
+    </div>
+  `;
+}
+
+function renderCreatableSelect(field, value = '', facets = {}) {
+  const conditionalAttr = field.conditionalOn
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
+    : '';
+  
+  let datalistId = `${field.name}-options`;
+  let defaultOptions = [];
+  
+  if (field.name === 'city' && facets.cities) {
+    defaultOptions = facets.cities;
+  } else if (field.name === 'tradeArea' && facets.tradeAreas) {
+    defaultOptions = facets.tradeAreas;
+  }
+  
+  return `
+    <div class="form-group"${conditionalAttr}>
+      <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
+      <input class="form-input form-creatable-select" type="text" id="${field.name}" name="${field.name}"
+             list="${datalistId}" value="${value}"
+             placeholder="${field.placeholder || 'Type or select...'}" ${field.required ? 'required' : ''} autocomplete="off" />
+      <datalist id="${datalistId}">
+        ${defaultOptions.map(o => `<option value="${o}"></option>`).join('')}
+      </datalist>
     </div>
   `;
 }
@@ -238,6 +267,16 @@ export const renderEditProperty = async (container, id) => {
     return;
   }
 
+  let facets = {};
+  let cityTradeAreaMap = {};
+  try {
+    const items = await getInventoryItems({});
+    facets = extractFacets(items);
+    cityTradeAreaMap = facets.cityTradeAreaMap || {};
+  } catch (err) {
+    console.warn("Could not fetch inventory for autocomplete", err);
+  }
+
   const sectionsHtml = SECTIONS.map(section => `
     <div class="form-section ${section.id === 'property-info' ? '' : 'collapsed'}" data-section="${section.id}">
       <div class="form-section-header">
@@ -246,7 +285,7 @@ export const renderEditProperty = async (container, id) => {
       <div class="form-section-body">
         ${section.fields.map(field => {
           const val = field.type === 'file' ? (item.images?.[field.name] || []) : item[field.name];
-          return renderField(field, val);
+          return renderField(field, val, facets);
         }).join('')}
       </div>
     </div>
@@ -302,6 +341,28 @@ export const renderEditProperty = async (container, id) => {
       });
     });
   });
+
+  // ─── Dependent Autocomplete Logic (City -> Trade Area) ───
+  const cityInput = container.querySelector('#city');
+  const tradeAreaDatalist = container.querySelector('#tradeArea-options');
+  if (cityInput && tradeAreaDatalist) {
+    // Initial setup for edit state based on loaded property
+    const initialCity = item?.city || '';
+    if (initialCity) {
+      const initialTradeAreas = cityTradeAreaMap[initialCity] || facets.tradeAreas || [];
+      tradeAreaDatalist.innerHTML = initialTradeAreas.map(ta => `<option value="${ta}"></option>`).join('');
+    }
+
+    cityInput.addEventListener('input', (e) => {
+      const selectedCity = e.target.value.trim();
+      const validTradeAreas = cityTradeAreaMap[selectedCity] || [];
+      if (validTradeAreas.length > 0) {
+        tradeAreaDatalist.innerHTML = validTradeAreas.map(ta => `<option value="${ta}"></option>`).join('');
+      } else {
+        tradeAreaDatalist.innerHTML = (facets.tradeAreas || []).map(ta => `<option value="${ta}"></option>`).join('');
+      }
+    });
+  }
 
   // Initialize conditional fields using current values.
   container.querySelectorAll('[data-conditional-on]').forEach((el) => {

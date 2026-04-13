@@ -1,9 +1,10 @@
-import { createInventoryItem, updateInventoryItem } from '../backend/inventoryService.js';
+import { createInventoryItem, updateInventoryItem, getInventoryItems } from '../backend/inventoryService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
 import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
 import { SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
+import { extractFacets } from '../utils/filterEngine.js';
 
 const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i;
@@ -111,6 +112,33 @@ function renderSelect(field) {
   `;
 }
 
+function renderCreatableSelect(field, facets = {}) {
+  const conditionalAttr = field.conditionalOn
+    ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
+    : '';
+  
+  let datalistId = `${field.name}-options`;
+  let defaultOptions = [];
+  
+  if (field.name === 'city' && facets.cities) {
+    defaultOptions = facets.cities;
+  } else if (field.name === 'tradeArea' && facets.tradeAreas) {
+    defaultOptions = facets.tradeAreas;
+  }
+  
+  return `
+    <div class="form-group"${conditionalAttr}>
+      <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
+      <input class="form-input form-creatable-select" type="text" id="${field.name}" name="${field.name}"
+             list="${datalistId}"
+             placeholder="${field.placeholder || 'Type or select...'}" ${field.required ? 'required' : ''} autocomplete="off" />
+      <datalist id="${datalistId}">
+        ${defaultOptions.map(o => `<option value="${o}"></option>`).join('')}
+      </datalist>
+    </div>
+  `;
+}
+
 function renderToggle(field) {
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
@@ -162,9 +190,10 @@ function renderFileUpload(field) {
   `;
 }
 
-function renderField(field) {
+function renderField(field, facets) {
   let html = '';
   if (field.type === 'select') html = renderSelect(field);
+  else if (field.type === 'creatable-select') html = renderCreatableSelect(field, facets);
   else if (field.type === 'toggle') html = renderToggle(field);
   else if (field.type === 'file') html = renderFileUpload(field);
   else html = renderTextField(field);
@@ -200,8 +229,18 @@ function renderField(field) {
 
 // ─── Main Render ───
 
-export const renderIntakeForm = (container) => {
+export const renderIntakeForm = async (container) => {
   const selectedFilesByUpload = new Map();
+
+  let facets = {};
+  let cityTradeAreaMap = {};
+  try {
+    const items = await getInventoryItems({});
+    facets = extractFacets(items);
+    cityTradeAreaMap = facets.cityTradeAreaMap || {};
+  } catch (err) {
+    console.warn("Could not fetch inventory for autocomplete", err);
+  }
 
   const sectionsHtml = SECTIONS.map(section => `
     <div class="form-section ${section.collapsed ? 'collapsed' : ''}" data-section="${section.id}">
@@ -209,7 +248,7 @@ export const renderIntakeForm = (container) => {
         <span class="text-subheading">${section.title}</span>
       </div>
       <div class="form-section-body">
-        ${section.fields.map(renderField).join('')}
+        ${section.fields.map(f => renderField(f, facets)).join('')}
       </div>
     </div>
   `).join('');
@@ -247,6 +286,22 @@ export const renderIntakeForm = (container) => {
       });
     });
   });
+
+  // ─── Dependent Autocomplete Logic (City -> Trade Area) ───
+  const cityInput = container.querySelector('#city');
+  const tradeAreaDatalist = container.querySelector('#tradeArea-options');
+  if (cityInput && tradeAreaDatalist) {
+    cityInput.addEventListener('input', (e) => {
+      const selectedCity = e.target.value.trim();
+      const validTradeAreas = cityTradeAreaMap[selectedCity] || [];
+      if (validTradeAreas.length > 0) {
+        tradeAreaDatalist.innerHTML = validTradeAreas.map(ta => `<option value="${ta}"></option>`).join('');
+      } else {
+        // Fallback to all trade areas if no city map found
+        tradeAreaDatalist.innerHTML = (facets.tradeAreas || []).map(ta => `<option value="${ta}"></option>`).join('');
+      }
+    });
+  }
 
   // ─── Toggle buttons ───
   container.querySelectorAll('.toggle-group').forEach(group => {
