@@ -101,8 +101,15 @@ function buildCardHtml(item, i, userNameMap) {
       ? 'status-pending'
       : 'status-inactive';
 
+  // Property occupancy status (separate from listing status)
+  const propStatus = String(item.propertyStatus || '').trim();
+  const isOccupied = propStatus === 'Occupied';
+  const isUnderConstruction = propStatus === 'Under Construction';
+  const propStatusClass = isOccupied ? 'card-occupied' : isUnderConstruction ? 'card-construction' : '';
+  const isMergeable = item.mergable === true || String(item.mergable || '').toLowerCase() === 'yes';
+
   return `
-    <div class="card card-interactive animate-enter property-card-link ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;">
+    <div class="card card-interactive animate-enter property-card-link ${propStatusClass} ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;">
       ${isSelectionMode ? `<div class="card-check-circle ${selectedPropertyIds.has(item.id) ? 'checked' : ''}"><svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg></div>` : ''}
       <a href="#property/${item.id}" class="card-inner-link ${isSelectionMode ? 'link-disabled' : ''}" style="text-decoration: none; display: block; color: inherit;">
         <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
@@ -114,6 +121,18 @@ function buildCardHtml(item, i, userNameMap) {
               <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
             </div>
           `}
+          ${isMergeable ? `
+            <div class="mergeable-badge" title="Mergeable Unit" aria-label="Mergeable Unit">
+              <svg class="mergeable-icon" viewBox="0 0 120 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="10" width="38" height="30" rx="4" stroke="currentColor" stroke-width="4"/>
+                <path d="M40 25H50" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M45 20V30" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <rect x="50" y="10" width="38" height="30" rx="4" stroke="currentColor" stroke-width="4"/>
+                <path d="M92 25H114" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+                <path d="M106 17L114 25L106 33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          ` : ''}
           ${totalPhotos > 0 ? `<div class="card-photo-badge">${totalPhotos}</div>` : ''}
         </div>
         <div style="flex:1">
@@ -134,6 +153,8 @@ function buildCardHtml(item, i, userNameMap) {
       </div>
       <div class="card-footer" style="display:flex;align-items:center;gap:var(--space-sm)">
         <span class="status-dot ${statusClass}"></span>
+        ${isOccupied ? '<span class="badge badge-occupied">Occupied</span>' : ''}
+        ${isUnderConstruction ? '<span class="badge badge-construction">Under Construction</span>' : ''}
         <span class="text-caption">${footerMeta}</span>
         ${['admin', 'superadmin'].includes(window.userProfile?.role) ? `
           <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail?.split('@')[0] || userNameMap[item.createdBy] || 'Unknown Agent'}</span>

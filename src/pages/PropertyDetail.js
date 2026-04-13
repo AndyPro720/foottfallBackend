@@ -86,6 +86,31 @@ function getPriorityLocationLabel(item) {
   return '';
 }
 
+function toDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (typeof value.seconds === 'number') return new Date(value.seconds * 1000);
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getAddedDateLabel(item) {
+  const created = toDate(item.created_at);
+  if (!created) return '';
+  return created.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getAddedByLabel(item) {
+  return item.creatorName || item.creatorEmail || item.createdBy || 'Unknown user';
+}
+
 function buildPropertyInformationSummary(item, priorityLocationValue) {
   const propertySection = SECTIONS.find((section) => section.id === 'property-info');
   if (!propertySection) {
@@ -187,6 +212,8 @@ export const renderPropertyDetail = async (container, id) => {
     const priorityLocationValue = getPriorityLocationValue(item);
     const priorityMapLink = getPriorityMapLink(item);
     const priorityLocationLabel = getPriorityLocationLabel(item);
+    const addedDateLabel = getAddedDateLabel(item);
+    const addedByLabel = getAddedByLabel(item);
 
     const sectionsHtml = SECTIONS.map(section => {
       if (section.id === 'photos') return renderPhotoGallery(item);
@@ -365,9 +392,23 @@ export const renderPropertyDetail = async (container, id) => {
               : `<p class="text-label">${priorityLocationLabel || 'No location'}</p>`
             }
             ${(item.vicinityBrands || item.miscNotes) ? `
-              ${item.vicinityBrands ? `<p class="text-caption" style="margin-top:6px; color:var(--text-secondary);">📍 ${item.vicinityBrands}</p>` : ''}
+              ${item.vicinityBrands ? `
+                <p class="text-caption vicinity-brands-line">
+                  <span class="vicinity-brands-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path d="M3 9.5L5.5 6H18.5L21 9.5V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V9.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                      <path d="M3 10H21" stroke="currentColor" stroke-width="1.7"/>
+                      <path d="M9 14H15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                    </svg>
+                  </span>
+                  <span>${item.vicinityBrands}</span>
+                </p>
+              ` : ''}
               ${item.miscNotes ? `<p class="text-caption" style="margin-top:4px; color:var(--text-tertiary); font-style:italic;">${item.miscNotes}</p>` : ''}
             ` : ''}
+            <p class="text-caption property-added-meta">
+              ${addedDateLabel ? `Added: ${addedDateLabel}` : 'Added: N/A'} | By: ${addedByLabel}
+            </p>
           </div>
           <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px">
             <div class="status-select-wrapper" style="position:relative">
@@ -635,3 +676,4 @@ function renderPhotoGallery(item) {
     </div>
   `;
 }
+

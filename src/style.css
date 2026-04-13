@@ -284,6 +284,28 @@ a { color: inherit; text-decoration: none; }
   gap: 2px;
 }
 
+.mergeable-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 28px;
+  height: 20px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  color: var(--accent-green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.mergeable-icon {
+  width: 20px;
+  height: 12px;
+}
+
 .card-location-link {
   cursor: pointer;
   text-decoration: underline;
@@ -728,6 +750,32 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius-sm);
   background: var(--bg-overlay);
   color: var(--text-secondary);
+}
+
+/* Property status badges */
+.badge-occupied {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  font-size: 10px;
+  padding: 2px 6px;
+  letter-spacing: 0.02em;
+}
+
+.badge-construction {
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+  font-size: 10px;
+  padding: 2px 6px;
+  letter-spacing: 0.02em;
+}
+
+/* Card left-border accents for property occupancy status */
+.card-occupied {
+  border-left: 3px solid rgba(245, 158, 11, 0.5);
+}
+
+.card-construction {
+  border-left: 3px solid rgba(96, 165, 250, 0.4);
 }
 
 /* ========== ANIMATIONS ========== */
@@ -1296,6 +1344,34 @@ a { color: inherit; text-decoration: none; }
 
 .location-priority-box:hover {
   border-color: var(--border-hover);
+}
+
+.vicinity-brands-line {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vicinity-brands-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--accent-green);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vicinity-brands-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.property-added-meta {
+  margin-top: 8px;
+  color: var(--text-tertiary);
 }
 
 .link-primary {
