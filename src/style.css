@@ -15,6 +15,12 @@
   --surface-hover: rgba(255, 255, 255, 0.08);
   --top-bar-base-height: 44px;
   --bottom-nav-base-height: 64px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --app-top-offset: calc(var(--top-bar-base-height) + var(--safe-top));
+  --app-bottom-offset: calc(var(--bottom-nav-base-height) + var(--safe-bottom));
 
   /* Brand */
   --accent: #ffffff;
@@ -81,8 +87,8 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0;
-  padding-top: calc(var(--top-bar-base-height) + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(var(--bottom-nav-base-height) + env(safe-area-inset-bottom, 0px));
+  padding-top: var(--app-top-offset);
+  padding-bottom: var(--app-bottom-offset);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-size: var(--text-base);
@@ -98,7 +104,7 @@ a { color: inherit; text-decoration: none; }
   top: 0;
   left: 0;
   width: 100%;
-  height: calc(var(--top-bar-base-height) + env(safe-area-inset-top, 0px));
+  height: var(--app-top-offset);
   background: rgba(6, 28, 20, 0.92);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -106,10 +112,10 @@ a { color: inherit; text-decoration: none; }
   z-index: 1000;
   display: flex;
   align-items: center;
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--safe-top);
   padding-bottom: 0;
-  padding-left: max(var(--space-md), env(safe-area-inset-left, 0px));
-  padding-right: max(var(--space-md), env(safe-area-inset-right, 0px));
+  padding-left: max(var(--space-md), var(--safe-left));
+  padding-right: max(var(--space-md), var(--safe-right));
 }
 
 .top-bar-inner {
@@ -611,7 +617,7 @@ a { color: inherit; text-decoration: none; }
 
 .toast-fallback-inline {
   position: fixed;
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--app-bottom-offset) + 8px);
   left: 50%;
   transform: translateX(-50%);
   padding: var(--space-md) var(--space-lg);
@@ -665,7 +671,7 @@ a { color: inherit; text-decoration: none; }
   bottom: 0;
   left: 0;
   width: 100%;
-  height: calc(var(--bottom-nav-base-height) + env(safe-area-inset-bottom, 0px));
+  height: var(--app-bottom-offset);
   background: rgba(6, 28, 20, 0.92);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
@@ -675,7 +681,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   z-index: 1000;
   padding-top: 0;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--safe-bottom);
 }
 
 .nav-link {
@@ -1064,8 +1070,8 @@ a { color: inherit; text-decoration: none; }
 
 .lightbox-close {
   position: absolute;
-  top: 20px;
-  right: 20px;
+  top: calc(var(--safe-top) + 12px);
+  right: calc(var(--safe-right) + 12px);
   background: none;
   border: none;
   color: white;
@@ -1138,7 +1144,7 @@ a { color: inherit; text-decoration: none; }
 
 .connectivity-banner {
   position: fixed;
-  top: calc(var(--top-bar-base-height) + env(safe-area-inset-top, 0px) + 8px);
+  top: calc(var(--app-top-offset) + 8px);
   left: 50%;
   transform: translate(-50%, -10px);
   z-index: 1001;
@@ -1237,7 +1243,7 @@ a { color: inherit; text-decoration: none; }
 
 #toast-container {
   position: fixed;
-  bottom: calc(var(--bottom-nav-base-height) + env(safe-area-inset-bottom, 0px) + 8px);
+  bottom: calc(var(--app-bottom-offset) + 8px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -1433,16 +1439,9 @@ body {
 }
 
 body.ios-pwa {
-  --top-bar-base-height: 48px;
-  --bottom-nav-base-height: 60px;
-}
-
-body.ios-pwa .top-bar-inner {
-  min-height: var(--top-bar-base-height);
-}
-
-body.ios-pwa #app {
-  padding-top: var(--space-sm);
+  /* Keep iOS PWA aligned with the same safe-area math as all platforms. */
+  --top-bar-base-height: 44px;
+  --bottom-nav-base-height: 64px;
 }
 
 @media (max-width: 480px) {
@@ -1803,7 +1802,7 @@ body.ios-pwa #app {
 
 .upload-tracker {
   position: fixed;
-  bottom: calc(var(--bottom-nav-base-height) + env(safe-area-inset-bottom, 0px) + 8px);
+  bottom: calc(var(--app-bottom-offset) + 8px);
   right: 8px;
   left: 8px;
   max-width: 400px;
@@ -1947,7 +1946,7 @@ body.ios-pwa #app {
 /* ── Selection Action Bar (bottom sheet) ── */
 .selection-action-bar {
   position: fixed;
-  bottom: calc(var(--bottom-nav-base-height) + env(safe-area-inset-bottom, 0px) + 12px);
+  bottom: calc(var(--app-bottom-offset) + 12px);
   left: 16px;
   right: 16px;
   z-index: 2000;
@@ -2122,4 +2121,3 @@ body.ios-pwa #app {
   transition: background 0.15s;
 }
 .batch-status-opt:hover { background: rgba(255,255,255,0.05); }
-
