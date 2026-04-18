@@ -7,6 +7,12 @@ let profileCacheAt = 0;
 const PROFILE_CACHE_TTL_MS = 60 * 1000;
 const LAST_LOGIN_THROTTLE_MS = 30 * 60 * 1000;
 
+export function resetCurrentUserProfileCache() {
+  profileCache = null;
+  profileCacheUid = '';
+  profileCacheAt = 0;
+}
+
 function shouldRefreshLastLogin(uid) {
   if (!uid) return false;
   try {
@@ -111,12 +117,14 @@ export async function syncUserProfile(user) {
 /**
  * Fetches the document of the current user, prioritizing fast offline cache.
  */
-export async function getCurrentUserProfile() {
+export async function getCurrentUserProfile(options = {}) {
+  const { forceServer = false } = options;
   const user = auth.currentUser;
   if (!user) return null;
 
   const now = Date.now();
   if (
+    !forceServer &&
     profileCache &&
     profileCacheUid === user.uid &&
     (now - profileCacheAt) < PROFILE_CACHE_TTL_MS
@@ -126,19 +134,21 @@ export async function getCurrentUserProfile() {
   
   const userDocRef = doc(db, 'users', user.uid);
   
-  try {
-    // Try instant cache retrieval first
-    const cacheSnap = await getDocFromCache(userDocRef);
-    if (cacheSnap.exists()) {
-      // NOTE: Security rules must enforce access control on the backend.
-      // Caching roles locally is for UX rendering speed only.
-      profileCache = cacheSnap.data();
-      profileCacheUid = user.uid;
-      profileCacheAt = now;
-      return profileCache;
+  if (!forceServer) {
+    try {
+      // Try instant cache retrieval first
+      const cacheSnap = await getDocFromCache(userDocRef);
+      if (cacheSnap.exists()) {
+        // NOTE: Security rules must enforce access control on the backend.
+        // Caching roles locally is for UX rendering speed only.
+        profileCache = cacheSnap.data();
+        profileCacheUid = user.uid;
+        profileCacheAt = now;
+        return profileCache;
+      }
+    } catch (e) {
+      // Cache miss or error, fallback to server silently
     }
-  } catch (e) {
-    // Cache miss or error, fallback to server silently
   }
 
   // Fallback to server if cache is empty
@@ -151,6 +161,19 @@ export async function getCurrentUserProfile() {
     return profileCache;
   } catch (e) {
     console.warn("Could not fetch user profile from server.", e);
+    if (forceServer) {
+      try {
+        const cacheSnap = await getDocFromCache(userDocRef);
+        if (cacheSnap.exists()) {
+          profileCache = cacheSnap.data();
+          profileCacheUid = user.uid;
+          profileCacheAt = Date.now();
+          return profileCache;
+        }
+      } catch (cacheErr) {
+        // Ignore cache fallback errors when forced server fetch fails
+      }
+    }
     // Safe fallback so the app doesn't crash completely offline for returning users with cleared cache
     profileCache = { uid: user.uid, role: 'agent', status: 'pending' };
     profileCacheUid = user.uid;

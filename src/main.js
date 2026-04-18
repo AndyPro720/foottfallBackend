@@ -2,7 +2,7 @@ import './style.css';
 import { registerSW } from 'virtual:pwa-register';
 import { auth } from './backend/firebaseConfig';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { syncUserProfile, getCurrentUserProfile } from './backend/userRoleService';
+import { syncUserProfile, getCurrentUserProfile, resetCurrentUserProfileCache } from './backend/userRoleService';
 import { renderConnectivityBanner } from './components/ConnectivityBanner';
 import { showToast } from './utils/ui';
 
@@ -20,6 +20,7 @@ const app = document.getElementById('app');
 let topBarDocClickHandler = null;
 let lastHash = window.location.hash || '#';
 let authResolved = false;
+let pendingApprovalRetryTimer = null;
 
 function applyPlatformClasses() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -163,9 +164,26 @@ function renderPendingScreen(container) {
           <svg style="width:32px; height:32px; margin-top:14px; color:var(--text-secondary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
         </div>
         <p class="text-body" style="max-width:300px; margin:0 auto">Your account has been registered. Please contact your manager to activate your access.</p>
+        <p class="text-caption" style="margin-top: var(--space-sm)">Status refreshes automatically.</p>
       </div>
     </div>
   `;
+}
+
+function clearPendingApprovalRetry() {
+  if (pendingApprovalRetryTimer) {
+    clearTimeout(pendingApprovalRetryTimer);
+    pendingApprovalRetryTimer = null;
+  }
+}
+
+function schedulePendingApprovalRetry() {
+  clearPendingApprovalRetry();
+  pendingApprovalRetryTimer = setTimeout(() => {
+    if (auth.currentUser) {
+      router();
+    }
+  }, 15000);
 }
 
 // ─── Navigation ───
@@ -204,6 +222,7 @@ const router = async () => {
   const hash = window.location.hash || '#';
   const previousHash = lastHash;
   lastHash = hash;
+  clearPendingApprovalRetry();
 
   if (previousHash === '#') {
     sessionStorage.setItem('home-scroll-y', String(window.scrollY || 0));
@@ -228,6 +247,7 @@ const router = async () => {
   const existingNav = document.querySelector('.bottom-nav');
   if (existingNav) existingNav.remove();
   document.body.insertAdjacentHTML('beforeend', renderNav());
+  attachTopBarListeners();
 
   try {
     const user = auth.currentUser;
@@ -277,10 +297,14 @@ const router = async () => {
       window.userProfile = await getCurrentUserProfile();
     }
 
-    // Approval Gate: Only let active users proceed to inventory, keep admins free
+    // Approval gate: pending users force-refresh from server so newly approved users unlock without re-login
     if (window.userProfile?.status !== 'active' && !['admin', 'superadmin'].includes(window.userProfile?.role)) {
-       renderPendingScreen(app);
-       return;
+      window.userProfile = await getCurrentUserProfile({ forceServer: true });
+      if (window.userProfile?.status !== 'active' && !['admin', 'superadmin'].includes(window.userProfile?.role)) {
+        renderPendingScreen(app);
+        schedulePendingApprovalRetry();
+        return;
+      }
     }
 
     if (hash === '#') {
@@ -370,8 +394,6 @@ VITE_FIREBASE_APP_ID=your_app_id</pre>
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }
 
-  // Re-attach top bar listeners after every DOM render
-  attachTopBarListeners();
 };
 
 window.addEventListener('hashchange', router);
@@ -390,7 +412,15 @@ applyPlatformClasses();
 
 onAuthStateChanged(auth, (user) => {
   authResolved = true;
+  if (!user) {
+    window.userProfile = null;
+    resetCurrentUserProfileCache();
+  }
   if (user) {
+    if (window.userProfile?.uid !== user.uid) {
+      window.userProfile = null;
+      resetCurrentUserProfileCache();
+    }
     syncUserProfile(user).catch(err => console.error('Sync profile error:', err));
   }
   router();
