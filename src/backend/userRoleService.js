@@ -77,15 +77,19 @@ export async function syncUserProfile(user) {
         }
       }
 
-      // Check for pre-approval invite
+      let inviteRef = null;
+      let hasInvite = false;
+
+      // Check for pre-approval invite. The invite is consumed only after the
+      // user profile is created so security rules can verify the invite exists.
       if (status === 'pending' && user.email) {
         try {
           // Normalizing email to lowercase to match invite IDs safely
-          const inviteRef = doc(db, 'invites', user.email.toLowerCase());
+          inviteRef = doc(db, 'invites', user.email.toLowerCase());
           const inviteSnap = await getDoc(inviteRef);
           if (inviteSnap.exists()) {
             status = 'active';
-            await deleteDoc(inviteRef); // Consume the invite
+            hasInvite = true;
           }
         } catch(e) {
           console.warn("Could not check invites", e);
@@ -102,6 +106,13 @@ export async function syncUserProfile(user) {
         lastLogin: serverTimestamp()
       };
       await setDoc(userDocRef, userData);
+      if (hasInvite && inviteRef) {
+        try {
+          await deleteDoc(inviteRef); // Consume the invite after profile creation
+        } catch (e) {
+          console.warn("Could not consume invite", e);
+        }
+      }
       return userData;
     } else {
       updateLastLogin();

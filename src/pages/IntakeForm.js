@@ -601,7 +601,16 @@ export const renderIntakeForm = async (container) => {
             }
           } else {
             const input = container.querySelector(`#${field.name}`);
-            if (input?.value) data[field.name] = input.value;
+            if (!input?.value) return;
+
+            if (field.type === 'number') {
+              const numericValue = Number(input.value);
+              if (!Number.isNaN(numericValue)) {
+                data[field.name] = numericValue;
+              }
+            } else {
+              data[field.name] = input.value;
+            }
           }
         });
       });

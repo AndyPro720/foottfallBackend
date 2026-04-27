@@ -660,8 +660,18 @@ export const renderEditProperty = async (container, id) => {
               fileFields.push({ name: field.name, files: selected });
             }
           } else if (field.type !== 'facilityPhoto') {
-            const val = container.querySelector(`#${field.name}`)?.value;
-            if (val !== undefined) data[field.name] = val;
+            const input = container.querySelector(`#${field.name}`);
+            const val = input?.value;
+            if (val === undefined || val === '') return;
+
+            if (field.type === 'number') {
+              const numericValue = Number(val);
+              if (!Number.isNaN(numericValue)) {
+                data[field.name] = numericValue;
+              }
+            } else {
+              data[field.name] = val;
+            }
           }
         });
       });
