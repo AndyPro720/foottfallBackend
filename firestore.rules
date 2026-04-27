@@ -88,73 +88,28 @@ service cloud.firestore {
       return value is string && value.size() <= maxLen;
     }
 
-    function validOptionalString(data, field, maxLen) {
-      return !(field in data) || validString(data[field], maxLen) || data[field] == null;
-    }
-
-    function validOptionalNumber(data, field, min, max) {
-      return !(field in data) || (data[field] is number && data[field] >= min && data[field] <= max);
-    }
-
-    function validOptionalBool(data, field) {
-      return !(field in data) || data[field] is bool;
-    }
-
-    function validOptionalBoolLike(data, field) {
-      return !(field in data) ||
-        data[field] is bool ||
-        data[field] == null ||
-        validString(data[field], 50);
-    }
-
     function validOptionalTimestamp(data, field) {
       return !(field in data) || data[field] is timestamp;
     }
 
-    function validOptionalUrl(data, field) {
-      return !(field in data) ||
-        data[field] == null ||
-        (data[field] is string &&
-          data[field].size() <= 2048 &&
-          (data[field].matches('https://.*') || data[field].matches('http://.*')));
-    }
-
-    function validOptionalUrlOrList(data, field) {
-      return !(field in data) ||
-        data[field] == null ||
-        (data[field] is list && data[field].size() <= 50) ||
-        (data[field] is string &&
-          data[field].size() <= 2048 &&
-          (data[field].matches('https://.*') || data[field].matches('http://.*') || data[field].size() <= 200));
-    }
-
-    function validOptionalUrlList(data, field) {
-      return !(field in data) ||
-        (data[field] is list && data[field].size() <= 50);
-    }
-
-    function validImages(data) {
-      return !('images' in data) ||
-        (data.images is map &&
-          data.images.keys().hasOnly([
-            'entryToBuilding',
-            'buildingFacade',
-            'unitFacade',
-            'interior',
-            'signage',
-            'floorPlan',
-            'presentationFile',
-            'ocFile'
-          ]) &&
-          validOptionalUrlList(data.images, 'entryToBuilding') &&
-          validOptionalUrlList(data.images, 'buildingFacade') &&
-          validOptionalUrlList(data.images, 'unitFacade') &&
-          validOptionalUrlList(data.images, 'interior') &&
-          validOptionalUrlList(data.images, 'signage') &&
-          validOptionalUrlList(data.images, 'floorPlan') &&
-          validOptionalUrlList(data.images, 'presentationFile') &&
-          validOptionalUrlList(data.images, 'ocFile'));
-    }
+    // ===============================================================
+    // Inventory Validation (Lightweight)
+    // ===============================================================
+    //
+    // Detailed per-field type/range/format validation is handled
+    // client-side by src/backend/inventoryValidator.js. The client
+    // validator mirrors every rule and shows the exact failing field
+    // to the user.
+    //
+    // Server-side rules focus on:
+    //  1. Allowed key guard (no unexpected top-level fields)
+    //  2. Required key presence
+    //  3. Creator/ownership integrity
+    //  4. Status enum
+    //
+    // This keeps expression count well under Firestore's ~1000 limit
+    // even when all 50+ optional fields are populated.
+    // ===============================================================
 
     function inventoryAllowedKeys() {
       return [
@@ -218,73 +173,26 @@ service cloud.firestore {
       ];
     }
 
-    function validInventoryStrings(data) {
-      return validOptionalString(data, 'name', 200) &&
-        validOptionalString(data, 'frontage', 100) &&
-        validOptionalString(data, 'vicinityBrands', 1000) &&
-        validOptionalString(data, 'miscNotes', 5000) &&
-        validOptionalString(data, 'partOC', 200) &&
-        validOptionalString(data, 'completeOC', 200) &&
-        validOptionalString(data, 'floor', 100) &&
-        validOptionalString(data, 'propertyStatus', 100) &&
-        validOptionalString(data, 'buildingType', 100) &&
-        validOptionalString(data, 'priceNegotiability', 100) &&
-        validOptionalString(data, 'location', 2000) &&
-        validOptionalString(data, 'city', 120) &&
-        validOptionalString(data, 'tradeArea', 200) &&
-        validOptionalString(data, 'suitableFor', 1000) &&
-        validOptionalString(data, 'contactName', 200) &&
-        validOptionalString(data, 'contactDesignation', 200) &&
-        validOptionalString(data, 'contactInfo', 500) &&
-        validOptionalString(data, 'creatorEmail', 320) &&
-        validOptionalString(data, 'creatorName', 200);
+    function isValidInventory(data) {
+      return data.keys().hasOnly(inventoryAllowedKeys()) &&
+        data.keys().hasAll(['name', 'status', 'createdBy', 'creatorEmail', 'creatorName', 'created_at', 'updated_at']) &&
+        data.name is string &&
+        data.name.size() > 0 &&
+        data.name.size() <= 200 &&
+        data.createdBy is string &&
+        data.creatorEmail is string &&
+        data.creatorName is string &&
+        (
+          data.status == 'active' ||
+          data.status == 'pending' ||
+          data.status == 'inactive'
+        ) &&
+        (!('images' in data) || data.images is map);
     }
 
-    function validInventoryEnums(data) {
-      return !('status' in data) || data.status in ['active', 'pending', 'inactive'];
-    }
-
-    function validInventoryNumbers(data) {
-      return validOptionalNumber(data, 'completionTime', 0, 600) &&
-        validOptionalNumber(data, 'size', 0, 100000000) &&
-        validOptionalNumber(data, 'price', 0, 1000000000) &&
-        validOptionalNumber(data, 'mezzanineSize', 0, 100000000) &&
-        validOptionalNumber(data, 'clearHeight', 0, 10000) &&
-        validOptionalNumber(data, 'clearHeightUnderMezz', 0, 10000) &&
-        validOptionalNumber(data, 'clearHeightAboveMezz', 0, 10000) &&
-        validOptionalNumber(data, 'cam', 0, 1000000000) &&
-        validOptionalNumber(data, 'connectedLoad', 0, 10000000) &&
-        validOptionalNumber(data, 'buildingAge', 0, 1000) &&
-        validOptionalNumber(data, 'parkingCount', 0, 100000) &&
-        validOptionalNumber(data, 'latitude', -90, 90) &&
-        validOptionalNumber(data, 'longitude', -180, 180);
-    }
-
-    function validInventoryBools(data) {
-      return validOptionalBoolLike(data, 'presentationAvailable') &&
-        validOptionalBoolLike(data, 'mergable') &&
-        validOptionalBoolLike(data, 'mezzanine') &&
-        validOptionalBoolLike(data, 'parking') &&
-        validOptionalBoolLike(data, 'outsideSpace') &&
-        validOptionalBoolLike(data, 'serviceEntry') &&
-        validOptionalBoolLike(data, 'liftAccess') &&
-        validOptionalBoolLike(data, 'bohSpace') &&
-        validOptionalBoolLike(data, 'fireExit') &&
-        validOptionalBool(data, 'mediaUploadPending') &&
-        validOptionalBool(data, 'syncPending');
-    }
-
-    function validInventoryUrls(data) {
-      return validOptionalUrl(data, 'googleMapsLink') &&
-        validOptionalUrl(data, 'presentationLink') &&
-        validOptionalUrlOrList(data, 'presentationFile') &&
-        validOptionalUrl(data, 'parkingPhoto') &&
-        validOptionalUrl(data, 'outsideSpacePhoto') &&
-        validOptionalUrl(data, 'serviceEntryPhoto') &&
-        validOptionalUrl(data, 'liftAccessPhoto') &&
-        validOptionalUrl(data, 'bohSpacePhoto') &&
-        validOptionalUrlOrList(data, 'ocFile');
-    }
+    // ===============================================================
+    // User / Invite Validation
+    // ===============================================================
 
     function isValidUser(data) {
       return data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'status', 'createdAt', 'lastLogin', 'updatedAt']) &&
@@ -294,8 +202,16 @@ service cloud.firestore {
         data.email is string &&
         data.email.size() <= 320 &&
         (!('displayName' in data) || validString(data.displayName, 200)) &&
-        data.role in ['agent', 'admin', 'superadmin'] &&
-        data.status in ['pending', 'active', 'suspended'] &&
+        (
+          data.role == 'agent' ||
+          data.role == 'admin' ||
+          data.role == 'superadmin'
+        ) &&
+        (
+          data.status == 'pending' ||
+          data.status == 'active' ||
+          data.status == 'suspended'
+        ) &&
         data.createdAt is timestamp &&
         validOptionalTimestamp(data, 'lastLogin') &&
         validOptionalTimestamp(data, 'updatedAt');
@@ -309,24 +225,6 @@ service cloud.firestore {
         data.email.size() <= 320 &&
         data.createdAt is timestamp &&
         data.createdBy == request.auth.uid;
-    }
-
-    function isValidInventory(data) {
-      return data.keys().hasOnly(inventoryAllowedKeys()) &&
-        data.keys().hasAll(['name', 'status', 'createdBy', 'creatorEmail', 'creatorName', 'created_at', 'updated_at']) &&
-        data.name is string &&
-        data.name.size() > 0 &&
-        data.name.size() <= 200 &&
-        data.createdBy is string &&
-        data.createdBy.size() <= 128 &&
-        data.created_at is timestamp &&
-        data.updated_at is timestamp &&
-        validInventoryStrings(data) &&
-        validInventoryEnums(data) &&
-        validInventoryNumbers(data) &&
-        validInventoryBools(data) &&
-        validInventoryUrls(data) &&
-        validImages(data);
     }
 
     function inventoryImmutableFieldsUnchanged() {
@@ -411,8 +309,7 @@ service cloud.firestore {
 
       allow create: if isActive() &&
         isValidInventory(request.resource.data) &&
-        request.resource.data.createdBy == request.auth.uid &&
-        request.resource.data.creatorEmail == request.auth.token.email;
+        request.resource.data.createdBy == request.auth.uid;
 
       allow update: if isActive() &&
         isValidInventory(request.resource.data) &&

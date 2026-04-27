@@ -4,8 +4,73 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "./firebaseConfig.js";
 import { getCurrentUserRole } from "./userRoleService.js";
+import { validateInventoryPayload } from "./inventoryValidator.js";
 
 const INVENTORY_COLLECTION = "inventory";
+
+function describeValue(value) {
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  if (Array.isArray(value)) return `array(${value.length})`;
+  if (typeof value === "object") {
+    if (typeof value?.toDate === "function" || typeof value?.toMillis === "function") {
+      return "firestore-timestamp";
+    }
+    if ("seconds" in value && "nanoseconds" in value) {
+      return "firestore-timestamp-like";
+    }
+    if ("_methodName" in value) {
+      return `fieldValue:${value._methodName}`;
+    }
+    return "object";
+  }
+  return typeof value;
+}
+
+function buildDebugShape(data) {
+  return Object.fromEntries(
+    Object.entries(data || {}).map(([key, value]) => {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        return [key, {
+          type: describeValue(value),
+          keys: Object.keys(value).slice(0, 20),
+        }];
+      }
+      return [key, {
+        type: describeValue(value),
+        value,
+      }];
+    })
+  );
+}
+
+function logInventoryWriteDebug(label, payload, error = null) {
+  if (typeof window === "undefined") return;
+
+  const authUser = auth.currentUser;
+  const debugInfo = {
+    label,
+    auth: authUser ? {
+      uid: authUser.uid,
+      email: authUser.email,
+      displayName: authUser.displayName,
+    } : null,
+    profile: window.userProfile || null,
+    payload,
+    payloadShape: buildDebugShape(payload),
+    error: error ? {
+      code: error.code,
+      message: error.message,
+      name: error.name,
+    } : null,
+    at: new Date().toISOString(),
+  };
+
+  window.__inventoryCreateDebug = debugInfo;
+  console.groupCollapsed(`[inventory-debug] ${label}`);
+  console.log(debugInfo);
+  console.groupEnd();
+}
 
 /** Race a promise against a timeout. */
 function withTimeout(promise, ms, message = "Operation timed out") {
@@ -92,12 +157,33 @@ export async function createInventoryItem(data) {
       updated_at: serverTimestamp(),
     };
 
+    // Pre-flight validation: catch rule violations BEFORE hitting Firestore
+    // so we can show the user exactly which field is wrong.
+    const validation = validateInventoryPayload(writeData);
+    if (!validation.valid) {
+      const detail = validation.errors.join('\n• ');
+      console.error('[inventory-validate] Pre-flight failed:\n•', detail);
+      logInventoryWriteDebug("preflight-failed", writeData, {
+        code: 'validation/preflight',
+        message: detail,
+        name: 'ValidationError',
+      });
+      throw new Error(`Validation failed:\n• ${detail}`);
+    }
+
+    logInventoryWriteDebug("before-create", writeData);
+
     // Wait for local persistence commit so immediate follow-up writes (media URLs)
     // do not race against document creation.
     await setDoc(docRef, writeData);
 
+    logInventoryWriteDebug("create-success", {
+      docId: docRef.id,
+      ...writeData,
+    });
     return docRef.id;
   } catch (error) {
+    logInventoryWriteDebug("create-failed", data, error);
     console.error("Error adding inventory item:", error);
     throw error;
   }
