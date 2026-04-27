@@ -48,18 +48,7 @@ export async function syncUserProfile(user) {
     }
   };
 
-  // Try instant cache retrieval first
-  try {
-    const cacheSnap = await getDocFromCache(userDocRef);
-    if (cacheSnap.exists()) {
-      updateLastLogin();
-      return cacheSnap.data();
-    }
-  } catch (e) {
-    // Cache miss or error, fallback to server silently
-  }
-
-  // Fallback to server if cache is empty
+  // Always hit the server for syncUserProfile to ensure roles and status are fresh
   try {
     const userSnap = await getDoc(userDocRef);
     
@@ -116,7 +105,19 @@ export async function syncUserProfile(user) {
       return userData;
     } else {
       updateLastLogin();
-      return userSnap.data();
+      const serverData = userSnap.data();
+      if (typeof window !== 'undefined' && window.userProfile?.uid === serverData.uid) {
+        if (window.userProfile.role !== serverData.role || window.userProfile.status !== serverData.status) {
+          window.userProfile = serverData;
+          // Only update the profileCache if it exists for this user
+          if (profileCacheUid === serverData.uid) {
+            profileCache = serverData;
+            profileCacheAt = Date.now();
+          }
+          window.dispatchEvent(new Event('hashchange'));
+        }
+      }
+      return serverData;
     }
   } catch (e) {
     console.warn("Could not sync user profile from server.", e);
@@ -155,6 +156,22 @@ export async function getCurrentUserProfile(options = {}) {
         profileCache = cacheSnap.data();
         profileCacheUid = user.uid;
         profileCacheAt = now;
+        
+        // Background refresh from server to ensure roles/status stay up to date
+        getDoc(userDocRef).then(serverSnap => {
+          if (serverSnap.exists()) {
+            const freshData = serverSnap.data();
+            if (freshData.role !== profileCache.role || freshData.status !== profileCache.status) {
+              profileCache = freshData;
+              profileCacheAt = Date.now();
+              if (typeof window !== 'undefined' && window.userProfile?.uid === freshData.uid) {
+                window.userProfile = freshData;
+                window.dispatchEvent(new Event('hashchange'));
+              }
+            }
+          }
+        }).catch(() => { /* ignore offline errors for background refresh */ });
+
         return profileCache;
       }
     } catch (e) {

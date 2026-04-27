@@ -12,9 +12,7 @@ updated: 2026-03-06T11:18:40.000Z
 **Plan:** Implement user identity (Auth), Role-Based Access Control (RBAC), and offline resilience (Persistence/PWA).
 
 ## Last Action
-- Concluded Phase 5 UAT tracking in `05-UAT.md`.
-- 5 out of 6 tests passed (Auth, RBAC, Connectivity UI, Offline Reads).
-- Captured Test 6 (Offline Save Button UI Hang) in the backlog for later resolution.
+- Fixed a bug where a user's role promotion (e.g., to admin) was not reflected on their client due to stale IndexedDB caching. Added a background server fetch in `userRoleService.js` to ensure the UI updates dynamically when roles change.
 
 ## Next Steps
 1. Transition to Phase 6: Verification & Polish.
