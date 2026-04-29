@@ -80,6 +80,7 @@ export const SECTIONS = [
       { name: 'interior', label: 'Interior', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'signage', label: 'Signage', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'floorPlan', label: 'Floor Plan', type: 'file', accept: 'image/*,video/*,.pdf', multiple: true },
+      { name: 'cadFiles', label: 'CAD Files', type: 'file', accept: '.dwg,.dxf', multiple: true },
       { name: 'presentationLink', label: 'Presentation Link', type: 'text', placeholder: 'Paste presentation URL', conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
       { name: 'presentationFile', label: 'Presentation Attachment', type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,image/*,video/*', multiple: true, conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
     ]

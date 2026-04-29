@@ -1,21 +1,13 @@
 import { getInventoryItemById, updateInventoryItem, deleteInventoryItem } from '../backend/inventoryService.js';
 import { SECTIONS } from '../config/propertyFields.js';
-
-const VIDEO_FILE_RE = /\.(mp4|webm|mov|avi|mkv)(\?|$)/i;
-const PDF_FILE_RE = /\.pdf(\?|$)/i;
-const DOC_FILE_RE = /\.(ppt|pptx|doc|docx|xls|xlsx)(\?|$)/i;
-
-function isVideoUrl(url) {
-  return VIDEO_FILE_RE.test(String(url || ''));
-}
-
-function isPdfUrl(url) {
-  return PDF_FILE_RE.test(String(url || ''));
-}
-
-function isDocUrl(url) {
-  return DOC_FILE_RE.test(String(url || ''));
-}
+import {
+  getFileExtensionLabel,
+  getFileKindLabel,
+  isCadUrl,
+  isDocUrl,
+  isPdfUrl,
+  isVideoUrl,
+} from '../utils/media.js';
 
 function getNormalizedGoogleMapLink(item) {
   const rawLink = String(item.googleMapsLink || '').trim();
@@ -27,6 +19,13 @@ function hasPinnedCoordinates(item) {
   const latitude = Number(item.latitude);
   const longitude = Number(item.longitude);
   return Number.isFinite(latitude) && Number.isFinite(longitude);
+}
+
+function formatCoordinates(item) {
+  const latitude = Number(item.latitude);
+  const longitude = Number(item.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return '';
+  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
 }
 
 function getPriorityLocationValue(item) {
@@ -111,6 +110,54 @@ function getAddedByLabel(item) {
   return item.creatorName || item.creatorEmail || item.createdBy || 'Unknown user';
 }
 
+function getAllLocationDetails(item) {
+  const details = [];
+  const tradeArea = String(item.tradeArea || '').trim();
+  const city = String(item.city || '').trim();
+  const manualLocation = String(item.location || '').trim();
+  const googleMapsLink = getNormalizedGoogleMapLink(item);
+
+  if (tradeArea) {
+    details.push({ label: 'Trade Area', value: tradeArea, type: 'text' });
+  }
+
+  if (city) {
+    details.push({ label: 'City', value: city, type: 'text' });
+  }
+
+  if (manualLocation) {
+    details.push({ label: 'Exact Address', value: manualLocation, type: 'text' });
+  }
+
+  if (hasPinnedCoordinates(item)) {
+    details.push({
+      label: 'Pinned Map Location',
+      value: formatCoordinates(item),
+      type: 'pin',
+    });
+  }
+
+  if (googleMapsLink) {
+    details.push({
+      label: 'Google Map Link',
+      value: googleMapsLink,
+      type: 'link',
+    });
+  }
+
+  return details;
+}
+
+function renderFileTile(url, caption = '') {
+  return `
+    <div class="media-file-tile">
+      <span class="media-file-tile-ext">${getFileExtensionLabel(url)}</span>
+      <span class="media-file-tile-kind">${getFileKindLabel(url)}</span>
+      ${caption ? `<span class="text-caption media-file-tile-caption">${caption}</span>` : ''}
+    </div>
+  `;
+}
+
 function buildPropertyInformationSummary(item, priorityLocationValue) {
   const propertySection = SECTIONS.find((section) => section.id === 'property-info');
   if (!propertySection) {
@@ -119,7 +166,7 @@ function buildPropertyInformationSummary(item, priorityLocationValue) {
 
   const lines = [];
   propertySection.fields.forEach((field) => {
-    if (field.name === 'googleMapsLink' || field.name === 'location') return;
+    if (field.name === 'googleMapsLink' || field.name === 'location' || field.name === 'city' || field.name === 'tradeArea') return;
 
     if (field.type === 'file') {
       const files = item.images?.[field.name] || [];
@@ -142,7 +189,15 @@ function buildPropertyInformationSummary(item, priorityLocationValue) {
     lines.push(`${field.label}: ${value}${suffix}`);
   });
 
-  lines.push(`Location Details: ${priorityLocationValue || 'N/A'}`);
+  const locationDetails = getAllLocationDetails(item);
+  if (locationDetails.length > 0) {
+    lines.push('Location Details:');
+    locationDetails.forEach((detail) => {
+      lines.push(`${detail.label}: ${detail.value}`);
+    });
+  } else {
+    lines.push(`Location Details: ${priorityLocationValue || 'N/A'}`);
+  }
   return lines.join('\n');
 }
 
@@ -208,18 +263,18 @@ export const renderPropertyDetail = async (container, id) => {
     // ─── Render Sections ───
     const googleMapsLink = getNormalizedGoogleMapLink(item);
     const hasLeafletPin = hasPinnedCoordinates(item);
-    const fallbackAddress = String(item.location || '').trim();
     const priorityLocationValue = getPriorityLocationValue(item);
     const priorityMapLink = getPriorityMapLink(item);
     const priorityLocationLabel = getPriorityLocationLabel(item);
     const addedDateLabel = getAddedDateLabel(item);
     const addedByLabel = getAddedByLabel(item);
+    const allLocationDetails = getAllLocationDetails(item);
 
     const sectionsHtml = SECTIONS.map(section => {
       if (section.id === 'photos') return renderPhotoGallery(item);
 
       let fieldsHtml = section.fields.map(field => {
-        if (section.id === 'property-info' && (field.name === 'googleMapsLink' || field.name === 'location')) {
+        if (section.id === 'property-info' && (field.name === 'googleMapsLink' || field.name === 'location' || field.name === 'city' || field.name === 'tradeArea')) {
           return '';
         }
 
@@ -295,28 +350,26 @@ export const renderPropertyDetail = async (container, id) => {
               <div class="detail-item location-detail-item" style="grid-column: 1 / -1">
                 <span class="text-label" style="margin-bottom: var(--space-xs)">Location Details</span>
 
-                ${googleMapsLink ? `
-                  <div class="location-priority-box">
-                    <span class="text-caption" style="display:block; margin-bottom:4px">Google Map Link</span>
-                    <a href="${googleMapsLink}" target="_blank" rel="noopener" class="link-primary">
-                      Open Google Map
-                    </a>
-                  </div>
-                ` : hasLeafletPin ? `
-                  <div class="location-priority-box">
-                    <span class="text-caption" style="display:block; margin-bottom:4px">Pinned Map Location</span>
-                    <button type="button" class="btn-secondary btn-sm" id="toggle-map-btn" style="width:auto; min-height:0; padding:4px 12px; font-size:11px">
-                      View Interactive Map
-                    </button>
-                    <div id="static-map-container" style="display:none; margin-top:var(--space-sm)">
-                      <div id="static-map" class="static-map-preview"></div>
+                ${allLocationDetails.length > 0 ? `
+                  ${allLocationDetails.map((detail) => `
+                    <div class="location-priority-box">
+                      <span class="text-caption" style="display:block; margin-bottom:4px">${detail.label}</span>
+                      ${detail.type === 'link'
+                        ? `<a href="${detail.value}" target="_blank" rel="noopener" class="link-primary">Open Google Map</a>`
+                        : detail.type === 'pin'
+                          ? `
+                            <p class="text-body" style="font-size:13px; margin:0">${detail.value}</p>
+                            <button type="button" class="btn-secondary btn-sm" id="toggle-map-btn" style="width:auto; min-height:0; padding:4px 12px; font-size:11px; margin-top:var(--space-sm)">
+                              View Interactive Map
+                            </button>
+                            <div id="static-map-container" style="display:none; margin-top:var(--space-sm)">
+                              <div id="static-map" class="static-map-preview"></div>
+                            </div>
+                          `
+                          : `<p class="text-body" style="font-size:13px; margin:0">${detail.value}</p>`
+                      }
                     </div>
-                  </div>
-                ` : fallbackAddress ? `
-                  <div class="location-priority-box">
-                    <span class="text-caption" style="display:block; margin-bottom:4px">Exact Address</span>
-                    <p class="text-body" style="font-size:13px; margin:0">${fallbackAddress}</p>
-                  </div>
+                  `).join('')}
                 ` : `
                   <p class="text-caption">No location details available</p>
                 `}
@@ -331,7 +384,7 @@ export const renderPropertyDetail = async (container, id) => {
     }).join('');
 
     // ─── Phase 9: Prepare Slider Media ───
-    const mediaOrder = ['entryToBuilding', 'buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan'];
+    const mediaOrder = ['entryToBuilding', 'buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan', 'presentationFile', 'cadFiles'];
     const allMedia = [];
     mediaOrder.forEach(key => {
       const urls = item.images?.[key] || [];
@@ -349,23 +402,15 @@ export const renderPropertyDetail = async (container, id) => {
                   ${isVideoUrl(m.url)
                     ? `<video src="${m.url}" muted preload="metadata" style="pointer-events:none"></video>`
                     : isPdfUrl(m.url)
-                      ? `<div style="height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg-raised); gap:var(--space-md)">
-                           <svg width="48" height="48" fill="none" stroke="var(--text-tertiary)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                           <span class="text-label">PDF Document</span>
-                           <span class="text-caption">Tap to open PDF</span>
-                         </div>`
-                      : isDocUrl(m.url)
-                        ? `<div style="height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--bg-raised); gap:var(--space-md)">
-                             <svg width="48" height="48" fill="none" stroke="var(--accent-green)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                             <span class="text-label">Document</span>
-                             <span class="text-caption">Tap to view</span>
-                           </div>`
+                      ? renderFileTile(m.url, 'Tap to open')
+                      : (isDocUrl(m.url) || isCadUrl(m.url))
+                        ? renderFileTile(m.url, isCadUrl(m.url) ? 'Tap to open CAD' : 'Tap to open')
                         : `<img src="${m.url}" loading="eager" />`
                   }
                 </div>
               `).join('')
             : `<div class="slider-item" style="display:flex; align-items:center; justify-content:center; background:var(--bg-raised); color:var(--text-tertiary)">
-                 No Photos Available
+                 No Media Available
                </div>`
           }
         </div>
@@ -545,10 +590,12 @@ export const renderPropertyDetail = async (container, id) => {
     // ─── Lightbox logic ───
 
     window.openLightbox = (src) => {
-      if (isPdfUrl(src) || isDocUrl(src)) {
+      if (isPdfUrl(src) || isDocUrl(src) || isCadUrl(src)) {
         // iOS can't download docs natively — open via Google Docs Viewer for PPT/DOC
         if (isDocUrl(src)) {
           window.open(`https://docs.google.com/gview?url=${encodeURIComponent(src)}&embedded=false`, '_blank', 'noopener');
+        } else if (isCadUrl(src)) {
+          window.open(src, '_blank', 'noopener');
         } else {
           window.open(src, '_blank', 'noopener');
         }
@@ -622,6 +669,7 @@ function renderPhotoGallery(item) {
     { key: 'interior', label: 'Interior' },
     { key: 'signage', label: 'Signage' },
     { key: 'floorPlan', label: 'Floor Plan' },
+    { key: 'cadFiles', label: 'CAD Files' },
     { key: 'entryToBuilding', label: 'Entry to Building' },
     { key: 'presentationFile', label: 'Presentation' },
   ];
@@ -636,13 +684,13 @@ function renderPhotoGallery(item) {
         <div class="photo-scroll-row">
           ${urls.map(url => `
             <div class="photo-row-item" onclick="window.openLightbox('${url}')"
-               ${isDocUrl(url) || isPdfUrl(url) ? 'style="cursor:pointer;"' : ''}>
+               ${(isDocUrl(url) || isPdfUrl(url) || isCadUrl(url)) ? 'style="cursor:pointer;"' : ''}>
                ${isVideoUrl(url)
                  ? `<video src="${url}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
                  : isPdfUrl(url)
-                   ? `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-raised);gap:4px"><svg width="24" height="24" fill="none" stroke="var(--text-tertiary)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><span class="text-caption" style="font-size:10px">PDF</span></div>`
-                   : isDocUrl(url)
-                     ? `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg-raised);gap:4px"><svg width="24" height="24" fill="none" stroke="var(--accent-green)" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg><span class="text-caption" style="font-size:10px">Open Doc</span></div>`
+                   ? renderFileTile(url)
+                   : (isDocUrl(url) || isCadUrl(url))
+                     ? renderFileTile(url)
                      : `<img src="${url}" loading="lazy" />`
                }
             </div>

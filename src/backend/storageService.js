@@ -3,6 +3,90 @@ import { storage } from "./firebaseConfig.js";
 import { heicTo } from "heic-to";
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
+const IMAGE_COMPRESSION_MIN_SIZE = 1.5 * 1024 * 1024; // 1.5MB
+const IMAGE_MAX_EDGE = 2200;
+const IMAGE_COMPRESSION_QUALITY = 0.78;
+
+function isCompressibleImageFile(file) {
+  const fileType = String(file?.type || '').toLowerCase();
+  return (
+    fileType === 'image/jpeg' ||
+    fileType === 'image/jpg' ||
+    fileType === 'image/webp'
+  );
+}
+
+function getResizedDimensions(width, height, maxEdge) {
+  if (!width || !height) return { width, height };
+  const largestEdge = Math.max(width, height);
+  if (largestEdge <= maxEdge) return { width, height };
+  const scale = maxEdge / largestEdge;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+async function loadImageSource(file) {
+  if (typeof createImageBitmap === 'function') {
+    return createImageBitmap(file);
+  }
+
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Image decode failed'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+async function compressImageFile(file) {
+  if (
+    typeof document === 'undefined' ||
+    file.size < IMAGE_COMPRESSION_MIN_SIZE ||
+    !isCompressibleImageFile(file)
+  ) {
+    return file;
+  }
+
+  const source = await loadImageSource(file);
+  const width = source.width || source.naturalWidth || 0;
+  const height = source.height || source.naturalHeight || 0;
+  const resized = getResizedDimensions(width, height, IMAGE_MAX_EDGE);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = resized.width;
+  canvas.height = resized.height;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    if (typeof source.close === 'function') source.close();
+    return file;
+  }
+
+  context.drawImage(source, 0, 0, resized.width, resized.height);
+  if (typeof source.close === 'function') source.close();
+
+  const compressedBlob = await new Promise((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', IMAGE_COMPRESSION_QUALITY);
+  });
+
+  if (!compressedBlob) return file;
+  if (compressedBlob.size >= file.size * 0.95) return file;
+
+  const outputName = (file.name || `upload_${Date.now()}`).replace(/\.(jpe?g|webp)$/i, '.jpg');
+  return new File([compressedBlob], outputName, {
+    type: 'image/jpeg',
+    lastModified: file.lastModified || Date.now(),
+  });
+}
 
 
 /**
@@ -103,6 +187,15 @@ export async function uploadMultipleFiles(files, basePath, onProgress = null, on
         if (onFileProgress) onFileProgress(index, 15, 'uploading');
       } catch (err) {
         console.error("HEIC conversion failed, attempting raw upload:", err);
+      }
+    }
+
+    if (isCompressibleImageFile(file) && file.size >= IMAGE_COMPRESSION_MIN_SIZE) {
+      if (onFileProgress) onFileProgress(index, 10, 'converting');
+      try {
+        file = await compressImageFile(file);
+      } catch (err) {
+        console.warn('Image compression skipped:', err);
       }
     }
 

@@ -6,6 +6,7 @@ import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 import { extractFacets } from '../utils/filterEngine.js';
 import { initCreatableSelect } from '../utils/creatableSelect.js';
+import { acceptsVideo, getFileExtensionLabel, getFileKindLabel } from '../utils/media.js';
 
 const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i;
@@ -81,6 +82,14 @@ async function updateInventoryItemWithRetry(id, data, maxAttempts = 5) {
     }
   }
   throw lastError;
+}
+
+function getUploadPrompt(field) {
+  const hasVideo = acceptsVideo(field.accept);
+  if (hasVideo) {
+    return field.multiple ? 'Tap to add photos/videos' : 'Tap to upload media';
+  }
+  return field.multiple ? 'Tap to add files' : 'Tap to upload file';
 }
 
 // ─── Render Helpers ───
@@ -162,15 +171,16 @@ function renderFileUpload(field) {
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
     : '';
+  const hasVideoCapture = acceptsVideo(field.accept);
   return `
     <div class="form-group"${conditionalAttr}>
       <label class="form-label">${field.label}</label>
       <div class="file-upload-zone" data-upload="${field.name}">
-        <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-        <p class="text-caption">${field.multiple ? 'Tap to add photos/videos' : 'Tap to upload'}</p>
+        <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 16V4m0 0l-4 4m4-4l4 4"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16.5v1.5A2 2 0 006 20h12a2 2 0 002-2v-1.5"></path></svg>
+        <p class="text-caption">${getUploadPrompt(field)}</p>
         <input type="file" data-main-upload="true" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} />
-        <input type="file" data-video-capture="true" accept="video/*" capture="environment" />
-        <button type="button" class="capture-video-btn">Record Video</button>
+        ${hasVideoCapture ? '<input type="file" data-video-capture="true" accept="video/*" capture="environment" />' : ''}
+        ${hasVideoCapture ? '<button type="button" class="capture-video-btn">Record Video</button>' : ''}
       </div>
       <div class="file-preview-grid" data-previews="${field.name}"></div>
     </div>
@@ -434,7 +444,12 @@ export const renderIntakeForm = async (container) => {
             img.loading = 'lazy';
             devDiv.appendChild(img);
           } else {
-            devDiv.innerHTML = `<div class="badge">${file.name}</div>`;
+            devDiv.innerHTML = `
+              <div class="file-preview-file-card">
+                <span class="file-preview-file-ext">${getFileExtensionLabel(file.name)}</span>
+                <span class="file-preview-file-kind">${getFileKindLabel(file.name)}</span>
+              </div>
+            `;
           }
         } catch (err) {
           console.error('Preview error:', err);

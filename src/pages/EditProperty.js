@@ -6,6 +6,15 @@ import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 import { extractFacets } from '../utils/filterEngine.js';
 import { initCreatableSelect } from '../utils/creatableSelect.js';
+import {
+  acceptsVideo,
+  getFileExtensionLabel,
+  getFileKindLabel,
+  isCadUrl,
+  isDocUrl,
+  isPdfUrl,
+  isVideoUrl,
+} from '../utils/media.js';
 
 const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
 const VIDEO_EXTENSIONS = /\.(mp4|mov|webm|avi|mkv|m4v|3gp)$/i;
@@ -81,6 +90,35 @@ async function updateInventoryItemWithRetry(id, data, maxAttempts = 5) {
     }
   }
   throw lastError;
+}
+
+function getUploadPrompt(field, existing = false) {
+  const hasVideo = acceptsVideo(field.accept);
+  if (hasVideo) {
+    return field.multiple
+      ? (existing ? 'Add more photos/videos...' : 'Tap to add photos/videos')
+      : (existing ? 'Tap to replace media' : 'Tap to upload media');
+  }
+  return field.multiple
+    ? (existing ? 'Add more files...' : 'Tap to add files')
+    : (existing ? 'Tap to replace file' : 'Tap to upload file');
+}
+
+function renderExistingFilePreviewContent(url) {
+  if (isVideoUrl(url)) {
+    return `<video src="${url}" class="file-preview-thumb" muted preload="metadata"></video>`;
+  }
+
+  if (isPdfUrl(url) || isDocUrl(url) || isCadUrl(url)) {
+    return `
+      <div class="file-preview-file-card">
+        <span class="file-preview-file-ext">${getFileExtensionLabel(url)}</span>
+        <span class="file-preview-file-kind">${getFileKindLabel(url)}</span>
+      </div>
+    `;
+  }
+
+  return `<img src="${url}" class="file-preview-thumb" />`;
 }
 
 // Render helpers (reused from IntakeForm)
@@ -207,26 +245,24 @@ function renderFileUpload(field, existingUrls = []) {
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
     : '';
-  const isVideo = (url) => /\.(mp4|webm|mov|avi|mkv)/i.test(url);
+  const hasVideoCapture = acceptsVideo(field.accept);
   return `
     <div class="form-group"${conditionalAttr}>
       <label class="form-label">${field.label}</label>
       <div class="file-preview-grid" data-previews="${field.name}">
         ${(existingUrls || []).map(url => `
           <div class="file-preview-item">
-            ${isVideo(url)
-              ? `<video src="${url}" class="file-preview-thumb" muted preload="metadata"></video>`
-              : `<img src="${url}" class="file-preview-thumb" />`
-            }
+            ${renderExistingFilePreviewContent(url)}
             <button type="button" class="file-remove-btn" data-url="${url}">&times;</button>
           </div>
         `).join('')}
       </div>
       <div class="file-upload-zone" data-upload="${field.name}" style="margin-top: var(--space-sm)">
-        <p class="text-caption">${field.multiple ? 'Add more photos/videos...' : 'Tap to upload'}</p>
+        <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 16V4m0 0l-4 4m4-4l4 4"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16.5v1.5A2 2 0 006 20h12a2 2 0 002-2v-1.5"></path></svg>
+        <p class="text-caption">${getUploadPrompt(field, true)}</p>
         <input type="file" data-main-upload="true" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} />
-        <input type="file" data-video-capture="true" accept="video/*" capture="environment" />
-        <button type="button" class="capture-video-btn">Record Video</button>
+        ${hasVideoCapture ? '<input type="file" data-video-capture="true" accept="video/*" capture="environment" />' : ''}
+        ${hasVideoCapture ? '<button type="button" class="capture-video-btn">Record Video</button>' : ''}
       </div>
     </div>
   `;
@@ -490,7 +526,12 @@ export const renderEditProperty = async (container, id) => {
             img.src = displayUrl;
             devDiv.appendChild(img);
           } else {
-            devDiv.innerHTML = `<div class="badge">${file.name}</div>`;
+            devDiv.innerHTML = `
+              <div class="file-preview-file-card">
+                <span class="file-preview-file-ext">${getFileExtensionLabel(file.name)}</span>
+                <span class="file-preview-file-kind">${getFileKindLabel(file.name)}</span>
+              </div>
+            `;
           }
         } catch (err) {
           console.error('Preview error:', err);

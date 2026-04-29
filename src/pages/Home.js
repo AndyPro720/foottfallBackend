@@ -2,6 +2,12 @@ import { getInventoryItems, deleteInventoryItem, updateInventoryItem } from '../
 import { SECTIONS } from '../config/propertyFields.js';
 import { getAllUsers } from '../backend/userRoleService.js';
 import {
+  getFileExtensionLabel,
+  getFileKindLabel,
+  isVideoUrl,
+  isVisualMediaUrl,
+} from '../utils/media.js';
+import {
   applyFilters,
   createEmptyFilterState,
   extractFacets,
@@ -14,6 +20,7 @@ import { initCreatableSelect } from '../utils/creatableSelect.js';
 // ─── Module-Level State ───
 let cachedItems = null;       // Raw data cache (replaces homeCacheHtml)
 let cachedUserNameMap = {};
+let cachedUserRoleMap = {};
 let filterState = createEmptyFilterState();
 const stalePendingHandled = new Set();
 
@@ -38,50 +45,128 @@ function formatINR(value) {
   return `₹${Math.round(value).toLocaleString('en-IN')}`;
 }
 
-function getDisplayLocation(item) {
-  const tradeArea = String(item.tradeArea || '').trim();
-  const city = String(item.city || '').trim();
-  const parts = [];
-  if (tradeArea) parts.push(tradeArea);
-  if (city) parts.push(city);
-  return parts.join(', ');
+function getNormalizedGoogleMapLink(item) {
+  const googleMapsLink = String(item.googleMapsLink || '').trim();
+  if (!googleMapsLink) return '';
+  return /^https?:\/\//i.test(googleMapsLink) ? googleMapsLink : `https://${googleMapsLink}`;
 }
 
-function getMapLink(item) {
-  const googleMapsLink = String(item.googleMapsLink || '').trim();
-  if (googleMapsLink) {
-    return /^https?:\/\//i.test(googleMapsLink) ? googleMapsLink : `https://${googleMapsLink}`;
-  }
+function hasPinnedCoordinates(item) {
   const latitude = Number(item.latitude);
   const longitude = Number(item.longitude);
-  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+  return Number.isFinite(latitude) && Number.isFinite(longitude);
+}
+
+function formatCoordinates(item) {
+  const latitude = Number(item.latitude);
+  const longitude = Number(item.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return '';
+  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+}
+
+function getCardLocationSummary(item) {
+  const tradeArea = String(item.tradeArea || '').trim();
+  const city = String(item.city || '').trim();
+  const areaParts = [tradeArea, city].filter(Boolean);
+  if (areaParts.length > 0) {
+    return areaParts.join(', ');
+  }
+
+  const manualLocation = String(item.location || '').trim();
+  if (manualLocation) return manualLocation;
+
+  const pinLabel = formatCoordinates(item);
+  if (pinLabel) return pinLabel;
+
+  const googleMapsLink = getNormalizedGoogleMapLink(item);
+  if (googleMapsLink) return 'Open Google Map';
+
+  return '';
+}
+
+function getPrimaryLocationLink(item) {
+  const googleMapsLink = getNormalizedGoogleMapLink(item);
+  if (googleMapsLink) return googleMapsLink;
+
+  if (hasPinnedCoordinates(item)) {
+    const latitude = Number(item.latitude);
+    const longitude = Number(item.longitude);
     return `https://www.google.com/maps?q=${latitude},${longitude}`;
   }
-  const locationText = String(item.location || '').trim();
-  if (locationText) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationText)}`;
+
+  const manualLocation = String(item.location || '').trim();
+  if (manualLocation) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(manualLocation)}`;
   }
+
   return '';
+}
+
+const CARD_MEDIA_CATEGORIES = [
+  'entryToBuilding',
+  'buildingFacade',
+  'unitFacade',
+  'interior',
+  'signage',
+  'floorPlan',
+  'presentationFile',
+  'cadFiles',
+];
+
+function getCardMediaSummary(item) {
+  let totalMedia = 0;
+  let firstVisualUrl = '';
+  let firstFallbackUrl = '';
+
+  CARD_MEDIA_CATEGORIES.forEach((category) => {
+    const urls = Array.isArray(item.images?.[category]) ? item.images[category] : [];
+    totalMedia += urls.length;
+
+    urls.forEach((url) => {
+      if (!firstFallbackUrl) firstFallbackUrl = url;
+      if (!firstVisualUrl && isVisualMediaUrl(url)) {
+        firstVisualUrl = url;
+      }
+    });
+  });
+
+  return {
+    totalMedia,
+    firstVisualUrl,
+    firstFallbackUrl,
+  };
+}
+
+function renderCardThumbnail(item, visualUrl, fallbackUrl) {
+  if (visualUrl) {
+    if (isVideoUrl(visualUrl)) {
+      return `<video src="${visualUrl}" class="card-thumbnail" muted playsinline preload="metadata"></video>`;
+    }
+    return `<img src="${visualUrl}" class="card-thumbnail" alt="${item.name}" loading="lazy" />`;
+  }
+
+  if (fallbackUrl) {
+    return `
+      <div class="card-thumbnail-file" aria-label="${getFileKindLabel(fallbackUrl)} file">
+        <span class="card-thumbnail-file-ext">${getFileExtensionLabel(fallbackUrl)}</span>
+        <span class="card-thumbnail-file-kind">${getFileKindLabel(fallbackUrl)}</span>
+      </div>
+    `;
+  }
+
+  return `
+    <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-tertiary)">
+      <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+    </div>
+  `;
 }
 
 // ─── Card Builder ───
 
-function buildCardHtml(item, i, userNameMap) {
-  const categories = ['entryToBuilding', 'buildingFacade', 'unitFacade', 'interior', 'signage', 'floorPlan'];
-  let totalPhotos = 0;
-  let firstThumb = null;
-
-  if (item.images) {
-    categories.forEach(cat => {
-      if (Array.from(item.images[cat] || []).length > 0) {
-        totalPhotos += item.images[cat].length;
-        if (!firstThumb) firstThumb = item.images[cat][0];
-      }
-    });
-  }
-
-  const displayLocation = getDisplayLocation(item);
-  const mapLink = getMapLink(item);
+function buildCardHtml(item, i) {
+  const { totalMedia, firstVisualUrl, firstFallbackUrl } = getCardMediaSummary(item);
+  const locationSummary = getCardLocationSummary(item);
+  const primaryLocationLink = getPrimaryLocationLink(item);
   const size = toFiniteNumber(item.size);
   const perSqft = toFiniteNumber(item.price);
   const hasSize = size !== null && size > 0;
@@ -107,6 +192,12 @@ function buildCardHtml(item, i, userNameMap) {
   const isUnderConstruction = propStatus === 'Under Construction';
   const propStatusClass = isOccupied ? 'card-occupied' : isUnderConstruction ? 'card-construction' : '';
   const isMergeable = item.mergable === true || String(item.mergable || '').toLowerCase() === 'yes';
+  const isAdminViewer = ['admin', 'superadmin'].includes(window.userProfile?.role);
+  const creatorRole = cachedUserRoleMap[item.createdBy] || '';
+  const isAgentAdded = isAdminViewer && creatorRole === 'agent';
+  const locationHtml = locationSummary
+    ? `<p class="text-label ${primaryLocationLink ? 'card-location-link' : ''}" ${primaryLocationLink ? `data-map-link="${primaryLocationLink}"` : ''} style="margin-top:var(--space-xs)">${locationSummary}</p>`
+    : '<p class="text-label" style="margin-top:var(--space-xs)">No location</p>';
 
   return `
     <div class="card card-interactive animate-enter property-card-link ${propStatusClass} ${isSelectionMode && selectedPropertyIds.has(item.id) ? 'card-selected' : ''}" data-property-id="${item.id}" style="--delay:${(i + 1) * 40}ms; position: relative; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;">
@@ -114,13 +205,7 @@ function buildCardHtml(item, i, userNameMap) {
       <a href="#property/${item.id}" class="card-inner-link ${isSelectionMode ? 'link-disabled' : ''}" style="text-decoration: none; display: block; color: inherit;">
         <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
           <div class="card-thumbnail-wrapper property-card-thumbnail">
-          ${firstThumb ? `
-            <img src="${firstThumb}" class="card-thumbnail" alt="${item.name}" loading="lazy" />
-          ` : `
-            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-tertiary)">
-              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-            </div>
-          `}
+          ${renderCardThumbnail(item, firstVisualUrl, firstFallbackUrl)}
           ${isMergeable ? `
             <div class="mergeable-badge" title="Mergeable Unit" aria-label="Mergeable Unit">
               <svg class="mergeable-icon" viewBox="0 0 120 60" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -133,7 +218,7 @@ function buildCardHtml(item, i, userNameMap) {
               </svg>
             </div>
           ` : ''}
-          ${totalPhotos > 0 ? `<div class="card-photo-badge">${totalPhotos}</div>` : ''}
+          ${totalMedia > 0 ? `<div class="card-photo-badge">${totalMedia}</div>` : ''}
         </div>
         <div style="flex:1">
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 8px;">
@@ -141,14 +226,12 @@ function buildCardHtml(item, i, userNameMap) {
             <div style="display:flex; flex-direction:column; align-items:flex-end; gap: var(--space-xs);">
               ${totalRent ? `<span class="badge badge-rent">${formatINR(totalRent)}</span>` : ''}
               ${!totalRent && hasPerSqft ? `<span class="badge">${formatINR(perSqft)}/sqft</span>` : ''}
+              ${isAgentAdded ? '<span class="badge badge-agent-source">Agent Added</span>' : ''}
               ${hasBackgroundUpload ? `<span class="badge badge-sync">Media Pending</span>` : ''}
               ${!hasBackgroundUpload && hasOfflineSync ? `<span class="badge badge-sync">Sync Pending</span>` : ''}
             </div>
           </div>
-          ${displayLocation
-            ? `<p class="text-label ${mapLink ? 'card-location-link' : ''}" ${mapLink ? `data-map-link="${mapLink}"` : ''} style="margin-top:var(--space-xs)">${displayLocation}</p>`
-            : '<p class="text-label" style="margin-top:var(--space-xs)">No location</p>'
-          }
+          ${locationHtml}
         </div>
       </div>
       <div class="card-footer" style="display:flex;align-items:center;gap:var(--space-sm)">
@@ -156,9 +239,6 @@ function buildCardHtml(item, i, userNameMap) {
         ${isOccupied ? '<span class="badge badge-occupied">Occupied</span>' : ''}
         ${isUnderConstruction ? '<span class="badge badge-construction">Under Construction</span>' : ''}
         <span class="text-caption">${footerMeta}</span>
-        ${['admin', 'superadmin'].includes(window.userProfile?.role) ? `
-          <span class="text-caption" style="margin-left:auto; opacity:0.6; font-style:italic;">by ${item.creatorName || item.creatorEmail?.split('@')[0] || userNameMap[item.createdBy] || 'Unknown Agent'}</span>
-        ` : ''}
       </div>
       </a>
     </div>
@@ -1067,7 +1147,7 @@ export const renderHome = async (container, options = {}) => {
 
       const filtered = applyFilters(visibleItems, filterState);
       const hasFilters = hasActiveFilters(filterState) || filterState.searchText;
-      const cardsHtml = filtered.map((item, i) => buildCardHtml(item, i, cachedUserNameMap)).join('');
+      const cardsHtml = filtered.map((item, i) => buildCardHtml(item, i)).join('');
 
       // Focus Protection: If search input is active, only update list and chips
       const searchInput = document.getElementById('home-search-input');
@@ -1233,10 +1313,15 @@ export const renderHome = async (container, options = {}) => {
     if (['admin', 'superadmin'].includes(window.userProfile?.role)) {
       try {
         const users = await getAllUsers();
+        cachedUserNameMap = {};
+        cachedUserRoleMap = {};
         users.forEach(u => {
           cachedUserNameMap[u.id] = u.displayName || u.email?.split('@')[0] || 'Unknown';
+          cachedUserRoleMap[u.id] = u.role || '';
         });
       } catch { /* non-critical */ }
+    } else {
+      cachedUserRoleMap = {};
     }
 
     const currentUid = window.userProfile?.uid || '';

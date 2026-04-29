@@ -268,6 +268,32 @@ a { color: inherit; text-decoration: none; }
   object-fit: cover;
 }
 
+.card-thumbnail-file {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.card-thumbnail-file-ext {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.card-thumbnail-file-kind {
+  font-size: 9px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.08em;
+}
+
 .card-photo-badge {
   position: absolute;
   bottom: 2px;
@@ -311,6 +337,36 @@ a { color: inherit; text-decoration: none; }
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 2px;
+}
+
+.card-location-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: var(--space-xs);
+}
+
+.card-location-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.card-location-key {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.card-location-value {
+  min-width: 0;
+  word-break: break-word;
 }
 
 .card-error {
@@ -599,6 +655,34 @@ a { color: inherit; text-decoration: none; }
   display: inline-block;
 }
 
+.file-preview-file-card {
+  aspect-ratio: 1;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  text-align: center;
+}
+
+.file-preview-file-ext {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+
+.file-preview-file-kind {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.08em;
+}
+
 .file-remove-btn {
   position: absolute;
   top: 2px;
@@ -767,6 +851,12 @@ a { color: inherit; text-decoration: none; }
   font-size: 10px;
   padding: 2px 6px;
   letter-spacing: 0.02em;
+}
+
+.badge-agent-source {
+  background: rgba(59, 130, 246, 0.14);
+  color: #bfdbfe;
+  border: 1px solid rgba(147, 197, 253, 0.24);
 }
 
 /* Card left-border accents for property occupancy status */
@@ -1477,6 +1567,44 @@ body {
 .card-location-link {
   text-decoration: none;
   border-bottom: 1px dotted rgba(255, 255, 255, 0.5);
+}
+
+.card-location-item.card-location-link {
+  border-bottom: none;
+}
+
+.card-location-item.card-location-link .card-location-value {
+  border-bottom: 1px dotted rgba(255, 255, 255, 0.5);
+}
+
+.media-file-tile {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: var(--space-md);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.media-file-tile-ext {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.media-file-tile-kind {
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+}
+
+.media-file-tile-caption {
+  color: var(--text-tertiary);
 }
 
 #map-picker,

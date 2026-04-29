@@ -70,7 +70,7 @@ function render() {
         <div class="upload-tracker-item-header">
           <span class="upload-tracker-icon">${statusIcon}</span>
           <span class="upload-tracker-name" title="${u.fileName}">${u.fileName}${sizeLabel}</span>
-          <span class="upload-tracker-pct">${u.status === 'error' ? 'Failed' : u.status === 'done' ? 'Done' : u.status === 'converting' ? 'Converting' : `${Math.round(u.progress)}%`}</span>
+          <span class="upload-tracker-pct">${u.status === 'error' ? 'Failed' : u.status === 'done' ? 'Done' : u.status === 'converting' ? 'Processing' : `${Math.round(u.progress)}%`}</span>
         </div>
         ${u.status === 'uploading' || u.status === 'converting' ? `
           <div class="upload-tracker-bar-bg">
