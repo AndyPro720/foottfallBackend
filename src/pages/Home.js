@@ -206,6 +206,7 @@ function buildCardHtml(item, i) {
         <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
           <div class="card-thumbnail-wrapper property-card-thumbnail">
           ${renderCardThumbnail(item, firstVisualUrl, firstFallbackUrl)}
+          ${isAgentAdded ? '<div class="agent-source-marker" title="Added by agent" aria-label="Added by agent">A</div>' : ''}
           ${isMergeable ? `
             <div class="mergeable-badge" title="Mergeable Unit" aria-label="Mergeable Unit">
               <svg class="mergeable-icon" viewBox="0 0 120 60" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -226,7 +227,6 @@ function buildCardHtml(item, i) {
             <div style="display:flex; flex-direction:column; align-items:flex-end; gap: var(--space-xs);">
               ${totalRent ? `<span class="badge badge-rent">${formatINR(totalRent)}</span>` : ''}
               ${!totalRent && hasPerSqft ? `<span class="badge">${formatINR(perSqft)}/sqft</span>` : ''}
-              ${isAgentAdded ? '<span class="badge badge-agent-source">Agent Added</span>' : ''}
               ${hasBackgroundUpload ? `<span class="badge badge-sync">Media Pending</span>` : ''}
               ${!hasBackgroundUpload && hasOfflineSync ? `<span class="badge badge-sync">Sync Pending</span>` : ''}
             </div>
