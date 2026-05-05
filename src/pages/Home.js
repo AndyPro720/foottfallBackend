@@ -194,9 +194,20 @@ function buildCardHtml(item, i) {
   const isOccupied = propStatus === 'Occupied';
   const isUnderConstruction = propStatus === 'Under Construction';
   const propStatusClass = isOccupied ? 'card-occupied' : isUnderConstruction ? 'card-construction' : '';
-  const isMergeable = item.mergable === true || String(item.mergable || '').toLowerCase() === 'yes';
+  // Check parent project for inherited traits
+  let parentProject = null;
+  if (item.projectId && Array.isArray(cachedProjects)) {
+    parentProject = cachedProjects.find(p => p.id === item.projectId);
+  }
+
+  const isMergeable = item.mergable === true || 
+                     String(item.mergable || '').toLowerCase() === 'yes' ||
+                     (parentProject && (parentProject.mergable === true || String(parentProject.mergable || '').toLowerCase() === 'yes'));
+
+  const isBroker = String(item.contactDesignation || '').toLowerCase() === 'broker' ||
+                  (parentProject && String(parentProject.contactDesignation || '').toLowerCase() === 'broker');
+
   const isAdminViewer = ['admin', 'superadmin'].includes(window.userProfile?.role);
-  const isBroker = String(item.contactDesignation || '').toLowerCase() === 'broker';
   const locationHtml = locationSummary
     ? `<p class="text-label ${primaryLocationLink ? 'card-location-link' : ''}" ${primaryLocationLink ? `data-map-link="${primaryLocationLink}"` : ''} style="margin-top:var(--space-xs)">${locationSummary}</p>`
     : '<p class="text-label" style="margin-top:var(--space-xs)">No location</p>';
@@ -225,7 +236,7 @@ function buildCardHtml(item, i) {
         </div>
         <div style="flex:1">
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 8px;">
-            <h3 class="text-subheading">${item.name || 'Unnamed Property'}</h3>
+            <h3 class="text-subheading">${item.name || 'Unnamed Property'}${parentProject ? ` <span style="font-weight:400; font-size: 0.85em; opacity: 0.7;">(${parentProject.name})</span>` : ''}</h3>
             <div style="display:flex; flex-direction:column; align-items:flex-end; gap: var(--space-xs);">
               ${totalRent ? `<span class="badge badge-rent">${formatINR(totalRent)}</span>` : ''}
               ${!totalRent && hasPerSqft ? `<span class="badge">${formatINR(perSqft)}/sqft</span>` : ''}
@@ -1138,6 +1149,7 @@ function buildProjectCardHtml(project, index) {
   const location = [project.tradeArea, project.city].filter(Boolean).join(', ');
   const typeBadge = project.buildingType ? `<span style="font-size:10px;padding:2px 6px;border-radius:var(--radius-sm);background:var(--bg-overlay);color:var(--text-secondary)">${project.buildingType}</span>` : '';
   const unitCount = project.unitCount || 0;
+  const isBroker = String(project.contactDesignation || '').toLowerCase() === 'broker';
   
   // Thumbnail from building facade
   let thumbHtml = `
@@ -1147,6 +1159,7 @@ function buildProjectCardHtml(project, index) {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1"/>
         </svg>
       </div>
+      ${isBroker ? '<div class="agent-source-marker" style="top:8px;right:8px" title="Broker" aria-label="Broker">B</div>' : ''}
     </div>
   `;
   const facadeImages = project.images?.buildingFacade || [];
@@ -1158,6 +1171,7 @@ function buildProjectCardHtml(project, index) {
         <div class="card-thumbnail-wrapper">
           <span class="project-badge">PROJECT</span>
           <img class="card-thumbnail" src="${url}" alt="${project.name || ''}" loading="lazy">
+          ${isBroker ? '<div class="agent-source-marker" style="top:8px;right:8px" title="Broker" aria-label="Broker">B</div>' : ''}
         </div>
       `;
     }
@@ -1170,6 +1184,7 @@ function buildProjectCardHtml(project, index) {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1"/>
           </svg>
         </div>
+        ${isBroker ? '<div class="agent-source-marker" style="top:8px;right:8px" title="Broker" aria-label="Broker">B</div>' : ''}
       </div>
     `;
   }
@@ -1261,7 +1276,8 @@ export const renderHome = async (container, options = {}) => {
 
       const filtered = applyFilters(visibleItems, filterState);
       // Filter out items that belong to a project (they appear under their project card)
-      const standaloneFiltered = filtered.filter(item => !item.projectId);
+      const hasSearch = Boolean(filterState.search?.trim());
+      const standaloneFiltered = filtered.filter(item => !item.projectId || hasSearch);
       const hasFilters = hasActiveFilters(filterState) || filterState.searchText || filterTypeMode !== 'all';
       
       // Build unified feed (projects + standalone properties merged by date)

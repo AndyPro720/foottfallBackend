@@ -92,8 +92,12 @@ export async function renderProjectDetail(container, projectId) {
       </button>
 
       <div class="project-detail-header">
-        <div style="display:flex;align-items:center;gap:var(--space-sm)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm)">
           <span class="project-badge" style="position:static">PROJECT</span>
+          <button class="btn-secondary btn-sm" id="share-project-btn" style="width:auto;min-height:0;padding:6px 12px;display:flex;align-items:center;gap:6px">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+            Share
+          </button>
         </div>
         <h1 class="text-heading" style="margin-top:var(--space-sm)">${escHtml(project.name)}</h1>
         ${facadeHtml}
@@ -115,17 +119,44 @@ export async function renderProjectDetail(container, projectId) {
         ${unitsHtml}
       </div>
 
-      <div style="margin-top: var(--space-xl); display: flex; gap: var(--space-md)">
-        <button class="btn-secondary" style="flex:1" id="edit-project-btn">
+      <div style="margin-top: var(--space-xl); display: flex; gap: var(--space-md); flex-wrap: wrap;">
+        <button class="btn-secondary" style="flex:1; min-width:140px; display:flex; align-items:center; justify-content:center; gap:8px" id="edit-project-btn">
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
           Edit Project
         </button>
-        <button class="btn-secondary destructive" style="flex:1; border-color: var(--destructive); color: var(--destructive)" id="delete-project-btn">
+        <button class="btn-secondary destructive" style="flex:1; min-width:140px; border-color: var(--destructive); color: var(--destructive); display:flex; align-items:center; justify-content:center; gap:8px" id="delete-project-btn">
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
           Delete Project
         </button>
       </div>
     `;
+
+    // Share Project handler
+    document.getElementById('share-project-btn').onclick = async () => {
+      const unitCount = units.length;
+      const shareText = [
+        `Project: ${project.name}`,
+        `Location: ${[project.tradeArea, project.city].filter(Boolean).join(', ') || 'N/A'}`,
+        `Total Units: ${unitCount}`,
+        `Vicinity: ${project.vicinityBrands || 'N/A'}`
+      ].join('\n');
+      
+      const shareData = {
+        title: `Foottfall Project: ${project.name}`,
+        text: shareText,
+        url: window.location.href
+      };
+
+      try {
+        if (navigator.share) {
+          await navigator.share(shareData);
+        } else {
+          await navigator.clipboard.writeText(`${shareText}\nLink: ${shareData.url}`);
+          const { showToast } = await import('../utils/ui.js');
+          showToast('Project details copied', 'success');
+        }
+      } catch (err) { console.warn('Share failed', err); }
+    };
 
     // Edit Project handler - navigate to full edit form
     document.getElementById('edit-project-btn').onclick = () => {

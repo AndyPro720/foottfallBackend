@@ -507,9 +507,9 @@ export const renderPropertyDetail = async (container, id) => {
         ${sectionsHtml}
 
         <div style="margin-top: var(--space-xl); display: flex; gap: var(--space-md); flex-wrap: wrap;">
-           <a href="#edit/${item.id}" class="btn-secondary" style="flex:1; min-width:100px;">Edit Details</a>
-           <button class="btn-secondary" id="duplicate-btn" style="flex:1; min-width:100px;">Duplicate</button>
-           <button class="btn-secondary destructive" style="flex:1; border-color: var(--destructive); color: var(--destructive); min-width:100px;" id="delete-btn">Delete</button>
+           <a href="#edit/${item.id}" class="btn-secondary" style="flex:1; min-width:140px; display:flex; align-items:center; justify-content:center; gap:8px">Edit Details</a>
+           <button class="btn-secondary" id="duplicate-btn" style="flex:1; min-width:140px; display:flex; align-items:center; justify-content:center; gap:8px">Duplicate</button>
+           <button class="btn-secondary destructive" style="flex:1; min-width:140px; border-color: var(--destructive); color: var(--destructive); display:flex; align-items:center; justify-content:center; gap:8px" id="delete-btn">Delete</button>
         </div>
       </div>
     `;
