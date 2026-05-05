@@ -378,6 +378,15 @@ function renderAdvancedFilterPanel(facets) {
       <div class="filter-panel-body">
 
         <div class="filter-section">
+          <label class="filter-section-label">Record Type</label>
+          <div class="filter-chip-group">
+            <button class="chip ${filterTypeMode === 'all' ? 'chip-active' : ''}" data-adv-type="typeMode" data-adv-value="all">All</button>
+            <button class="chip ${filterTypeMode === 'properties' ? 'chip-active' : ''}" data-adv-type="typeMode" data-adv-value="properties">Properties</button>
+            <button class="chip ${filterTypeMode === 'projects' ? 'chip-active' : ''}" data-adv-type="typeMode" data-adv-value="projects">Projects</button>
+          </div>
+        </div>
+
+        <div class="filter-section">
           <label class="filter-section-label">Building Type</label>
           <div class="filter-chip-group">
             ${['Mall', 'Standalone', 'High Street'].map(bt => `

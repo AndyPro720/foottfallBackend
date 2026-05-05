@@ -1,4 +1,5 @@
 import { getInventoryItemById, updateInventoryItem, getInventoryItems } from '../backend/inventoryService.js';
+import { getProjectById, updateProject } from '../backend/projectService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
 import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
 import { SECTIONS, PROJECT_FIELD_NAMES } from '../config/propertyFields.js';
@@ -75,11 +76,17 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function updateInventoryItemWithRetry(id, data, maxAttempts = 5) {
+let currentType = 'property';
+
+async function updateItemWithRetry(id, data, maxAttempts = 5) {
   let lastError = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      await updateInventoryItem(id, data);
+      if (currentType === 'project') {
+        await updateProject(id, data);
+      } else {
+        await updateInventoryItem(id, data);
+      }
       return;
     } catch (error) {
       lastError = error;
@@ -270,13 +277,19 @@ function renderFileUpload(field, existingUrls = []) {
 
 let item = null; // Global within module for field rendering context
 
-export const renderEditProperty = async (container, id) => {
+export const renderEditProperty = async (container, id, type = 'property') => {
+  currentType = type;
   // Show skeleton
   container.innerHTML = `<div class="page-header"><h1 class="text-display">Editing...</h1></div>`;
 
-  item = await getInventoryItemById(id);
+  if (type === 'project') {
+    item = await getProjectById(id);
+  } else {
+    item = await getInventoryItemById(id);
+  }
+  
   if (!item) {
-    container.innerHTML = `<div class="card card-error">Property not found</div>`;
+    container.innerHTML = `<div class="card card-error">${type === 'project' ? 'Project' : 'Property'} not found</div>`;
     return;
   }
 
@@ -301,7 +314,9 @@ export const renderEditProperty = async (container, id) => {
     console.warn("Could not fetch inventory for autocomplete", err);
   }
 
-  const sectionsHtml = SECTIONS.map(section => `
+  const currentSections = type === 'project' ? PROJECT_SECTIONS : SECTIONS;
+
+  const sectionsHtml = currentSections.map(section => `
     <div class="form-section ${section.id === 'property-info' ? '' : 'collapsed'}" data-section="${section.id}">
       <div class="form-section-header">
         <span class="text-subheading">${section.title}</span>
@@ -317,10 +332,10 @@ export const renderEditProperty = async (container, id) => {
 
   container.innerHTML = `
     <div class="page-header animate-enter">
-      <h1 class="text-display">Edit Details</h1>
-      <p class="text-label">${item.name}</p>
+      <h1 class="text-display">Edit ${type === 'project' ? 'Project' : 'Details'}</h1>
+      <p class="text-label">${item.name || ''}</p>
     </div>
-    ${item.projectId ? `
+    ${(item.projectId && type !== 'project') ? `
       <div class="project-context-banner" style="margin-bottom:var(--space-md)">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
@@ -346,7 +361,7 @@ export const renderEditProperty = async (container, id) => {
   });
 
   // Lock project-level fields for units under a project
-  if (item.projectId) {
+  if (item.projectId && type !== 'project') {
     PROJECT_FIELD_NAMES.forEach(fieldName => {
       const input = container.querySelector(`#${fieldName}`);
       if (input) {
@@ -799,7 +814,7 @@ export const renderEditProperty = async (container, id) => {
                   updateData[`images.${field.name}`] = [...existing, ...urls];
                 }
                 addUploadLog(`Saving ${field.name} to database...`);
-                await updateInventoryItemWithRetry(id, updateData);
+                await updateItemWithRetry(id, updateData);
               } else {
                 hadUploadFailure = true;
               }
@@ -813,7 +828,7 @@ export const renderEditProperty = async (container, id) => {
             fileOffset += field.files.length;
           }
 
-          await updateInventoryItemWithRetry(id, { mediaUploadPending: hadUploadFailure });
+          await updateItemWithRetry(id, { mediaUploadPending: hadUploadFailure });
           if (typeof window.__invalidateHomeCache === 'function') {
             window.__invalidateHomeCache();
           }
@@ -827,7 +842,7 @@ export const renderEditProperty = async (container, id) => {
         };
 
         // First update the property locally (fast)
-        await updateInventoryItemWithRetry(id, data);
+        await updateItemWithRetry(id, data);
         
         addUploadLog('Property data saved. Starting media upload...');
         showToast('Changes saved. You can continue browsing while media uploads.', 'info');
@@ -843,9 +858,9 @@ export const renderEditProperty = async (container, id) => {
         return;
       }
 
-      await updateInventoryItem(id, data);
-      showToast('Changes saved successfully', 'success');
-      window.location.hash = `#property/${id}`;
+      await updateItemWithRetry(id, data);
+      showToast(`${currentType === 'project' ? 'Project' : 'Property'} updated successfully`, 'success');
+      window.location.hash = currentType === 'project' ? `#project/${id}` : `#property/${id}`;
     } catch (err) {
       console.error(err);
       alert('Failed to save changes: ' + err.message);

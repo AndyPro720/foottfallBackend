@@ -127,9 +127,9 @@ export async function renderProjectDetail(container, projectId) {
       </div>
     `;
 
-    // Edit Project handler - navigate to a project edit form
+    // Edit Project handler - navigate to full edit form
     document.getElementById('edit-project-btn').onclick = () => {
-      renderProjectEditInline(container, projectId, project);
+      window.location.hash = `#edit-project/${projectId}`;
     };
 
     // Delete Project handler

@@ -330,7 +330,11 @@ const router = async () => {
     } else if (hash.startsWith('#edit/')) {
       const id = hash.split('/')[1];
       const renderEditProperty = await lazyEditProperty();
-      await renderEditProperty(app, id);
+      await renderEditProperty(app, id, 'property');
+    } else if (hash.startsWith('#edit-project/')) {
+      const id = hash.split('/')[1];
+      const renderEditProperty = await lazyEditProperty();
+      await renderEditProperty(app, id, 'project');
     } else {
       app.innerHTML = `
         <div class="page-header">
