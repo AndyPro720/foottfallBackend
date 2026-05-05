@@ -1,4 +1,5 @@
 import { getInventoryItems, deleteInventoryItem, updateInventoryItem } from '../backend/inventoryService.js';
+import { getProjects } from '../backend/projectService.js';
 import { SECTIONS } from '../config/propertyFields.js';
 import { getAllUsers } from '../backend/userRoleService.js';
 import {
@@ -19,6 +20,7 @@ import { initCreatableSelect } from '../utils/creatableSelect.js';
 
 // ─── Module-Level State ───
 let cachedItems = null;       // Raw data cache (replaces homeCacheHtml)
+let cachedProjects = null;    // Projects cache
 let cachedUserNameMap = {};
 let cachedUserRoleMap = {};
 let filterState = createEmptyFilterState();
@@ -1107,8 +1109,78 @@ function closeFilterPanel() {
 
 // ─── Cache & Exports ───
 
+// ─── Project Card Builder ───
+
+function buildProjectCardHtml(project, index) {
+  const location = [project.tradeArea, project.city].filter(Boolean).join(', ');
+  const typeBadge = project.buildingType ? `<span style="font-size:10px;padding:2px 6px;border-radius:var(--radius-sm);background:var(--bg-overlay);color:var(--text-secondary)">${project.buildingType}</span>` : '';
+  const unitCount = project.unitCount || 0;
+  
+  // Thumbnail from building facade
+  let thumbHtml = `
+    <div class="card-thumbnail-wrapper">
+      <div class="card-thumbnail-file">
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1"/>
+        </svg>
+      </div>
+    </div>
+  `;
+  const facadeImages = project.images?.buildingFacade || [];
+  if (facadeImages.length > 0) {
+    const first = facadeImages[0];
+    const url = typeof first === 'string' ? first : first.url;
+    if (url) {
+      thumbHtml = `
+        <div class="card-thumbnail-wrapper">
+          <span class="project-badge">PROJECT</span>
+          <img class="card-thumbnail" src="${url}" alt="${project.name || ''}" loading="lazy">
+        </div>
+      `;
+    }
+  } else {
+    thumbHtml = `
+      <div class="card-thumbnail-wrapper">
+        <span class="project-badge">PROJECT</span>
+        <div class="card-thumbnail-file">
+          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1"/>
+          </svg>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <a href="#project/${project.id}" class="card card-interactive project-card animate-enter" style="--delay:${index * 60}ms; display:flex; gap:var(--space-md); align-items:center; padding:var(--space-md); text-decoration:none; cursor:pointer; position:relative; margin-bottom:var(--space-sm)">
+      ${thumbHtml}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:var(--text-sm);margin-bottom:2px">${project.name || 'Unnamed Project'}</div>
+        <div style="font-size:12px;color:var(--text-secondary)">${location || 'No location set'}</div>
+        <div style="display:flex;align-items:center;gap:var(--space-sm);margin-top:4px">
+          <span class="project-unit-count">${unitCount} unit${unitCount !== 1 ? 's' : ''}</span>
+          ${typeBadge}
+        </div>
+      </div>
+      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0;color:var(--text-tertiary)">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+      </svg>
+    </a>
+  `;
+}
+
+function buildProjectCardsSection(projects) {
+  if (!projects || projects.length === 0) return '';
+  return `
+    <div class="home-section-label">Projects</div>
+    ${projects.map((p, i) => buildProjectCardHtml(p, i)).join('')}
+    <div class="home-section-label" style="margin-top:var(--space-lg)">Properties</div>
+  `;
+}
+
 export const invalidateHomeCache = () => {
   cachedItems = null;
+  cachedProjects = null;
 };
 
 window.__invalidateHomeCache = invalidateHomeCache;
@@ -1146,8 +1218,13 @@ export const renderHome = async (container, options = {}) => {
         .map(entry => entry[0]);
 
       const filtered = applyFilters(visibleItems, filterState);
+      // Filter out items that belong to a project (they appear under their project card)
+      const standaloneFiltered = filtered.filter(item => !item.projectId);
       const hasFilters = hasActiveFilters(filterState) || filterState.searchText;
-      const cardsHtml = filtered.map((item, i) => buildCardHtml(item, i)).join('');
+      const cardsHtml = standaloneFiltered.map((item, i) => buildCardHtml(item, i)).join('');
+      
+      // Build project cards section
+      const projectCardsHtml = buildProjectCardsSection(cachedProjects || []);
 
       // Focus Protection: If search input is active, only update list and chips
       const searchInput = document.getElementById('home-search-input');
@@ -1170,7 +1247,7 @@ export const renderHome = async (container, options = {}) => {
         // Update result count label
         const resultLabel = container.querySelector('.text-label');
         if (resultLabel) {
-          resultLabel.textContent = `${filtered.length}${hasFilters ? ` of ${visibleItems.length}` : ''} propert${filtered.length === 1 ? 'y' : 'ies'}`;
+          resultLabel.textContent = `${standaloneFiltered.length}${hasFilters ? ` of ${visibleItems.filter(i => !i.projectId).length}` : ''} propert${standaloneFiltered.length === 1 ? 'y' : 'ies'}${(cachedProjects || []).length > 0 ? ` · ${(cachedProjects || []).length} project${(cachedProjects || []).length === 1 ? '' : 's'}` : ''}`;
         }
 
         // Update clear button visibility
@@ -1211,7 +1288,7 @@ export const renderHome = async (container, options = {}) => {
               <div>
                 <h1 class="text-display">Your Properties</h1>
                 <div style="display:flex; align-items:center; gap:var(--space-sm)">
-                  <p class="text-label">${filtered.length}${hasFilters ? ` of ${visibleItems.length}` : ''} propert${filtered.length === 1 ? 'y' : 'ies'}</p>
+                  <p class="text-label">${standaloneFiltered.length}${hasFilters ? ` of ${visibleItems.filter(i => !i.projectId).length}` : ''} propert${standaloneFiltered.length === 1 ? 'y' : 'ies'}${(cachedProjects || []).length > 0 ? ` · ${(cachedProjects || []).length} project${(cachedProjects || []).length === 1 ? '' : 's'}` : ''}</p>
                   ${isOffline ? '<span class="badge" style="background:var(--destructive-dim); color:white; border:none; font-size:10px">Offline: Cached</span>' : ''}
                 </div>
               </div>
@@ -1230,7 +1307,8 @@ export const renderHome = async (container, options = {}) => {
             ${renderChipBar({ ...rawFacets, tradeAreas: topTradeAreas })}
           </div>
           <div class="page-content" id="property-list">
-            ${filtered.length > 0 ? cardsHtml : `
+            ${projectCardsHtml}
+            ${standaloneFiltered.length > 0 ? cardsHtml : `
               <div class="empty-state animate-enter" style="--delay:100ms; padding: var(--space-xl) 0">
                 <svg class="empty-state-icon" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 <h2 class="text-heading" style="font-size:16px; margin-top:var(--space-md)">No properties match</h2>
@@ -1283,11 +1361,15 @@ export const renderHome = async (container, options = {}) => {
   }
 
   try {
-    const items = await getInventoryItems({}, () => {
-      renderHome(container, { forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
-    });
+    const [items, projects] = await Promise.all([
+      getInventoryItems({}, () => {
+        renderHome(container, { forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
+      }),
+      getProjects().catch(() => [])
+    ]);
     const allItems = Array.isArray(items) ? items : [];
     cachedItems = allItems;
+    cachedProjects = Array.isArray(projects) ? projects : [];
 
     // Stale pending cleanup
     if (navigator.onLine) {

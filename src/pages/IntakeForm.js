@@ -1,7 +1,8 @@
 import { createInventoryItem, updateInventoryItem, getInventoryItems } from '../backend/inventoryService.js';
+import { createProject, getProjectById } from '../backend/projectService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
 import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
-import { SECTIONS } from '../config/propertyFields.js';
+import { SECTIONS, PROJECT_SECTIONS, UNIT_ONLY_SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 import { extractFacets } from '../utils/filterEngine.js';
@@ -229,6 +230,22 @@ function renderField(field) {
 export const renderIntakeForm = async (container) => {
   const selectedFilesByUpload = new Map();
 
+  // Parse URL for project context
+  const hashParts = (window.location.hash || '').split('?');
+  const urlParams = new URLSearchParams(hashParts[1] || '');
+  const projectIdFromUrl = urlParams.get('projectId');
+  let projectData = null;
+  let formMode = projectIdFromUrl ? 'unit' : 'property'; // 'property' | 'project' | 'unit'
+
+  // Load project data if adding a unit under a project
+  if (projectIdFromUrl) {
+    try {
+      projectData = await getProjectById(projectIdFromUrl);
+    } catch (e) {
+      console.warn('Could not load project for auto-populate', e);
+    }
+  }
+
   let facets = {};
   let cityTradeAreaMap = {};
   try {
@@ -239,38 +256,101 @@ export const renderIntakeForm = async (container) => {
     console.warn("Could not fetch inventory for autocomplete", err);
   }
 
-  const sectionsHtml = SECTIONS.map(section => `
-    <div class="form-section ${section.collapsed ? 'collapsed' : ''}" data-section="${section.id}">
-      <div class="form-section-header">
-        <span class="text-subheading">${section.title}</span>
-      </div>
-      <div class="form-section-body">
-        ${section.fields.map(f => renderField(f)).join('')}
-      </div>
-    </div>
-  `).join('');
+  function getActiveSections() {
+    if (formMode === 'project') return PROJECT_SECTIONS;
+    if (formMode === 'unit') return UNIT_ONLY_SECTIONS;
+    return SECTIONS;
+  }
 
-  container.innerHTML = `
-    <div class="page-header animate-enter">
-      <h1 class="text-display">Register Property</h1>
-      <p class="text-label">Fill in the details below</p>
-    </div>
-    <form id="intake-form" class="animate-enter" style="--delay:100ms">
-      ${sectionsHtml}
-      <div id="form-error"></div>
-      <button type="submit" class="btn-primary" id="submit-btn">
-        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m-6-6h12"></path></svg>
-        Register New Retail Property
-      </button>
-    </form>
-  `;
+  function getSubmitLabel() {
+    if (formMode === 'project') return 'Create New Project';
+    if (formMode === 'unit') return 'Add Unit to Project';
+    return 'Register New Retail Property';
+  }
 
-  // ─── Section collapse toggles ───
+  function getPageTitle() {
+    if (formMode === 'project') return 'Create Project';
+    if (formMode === 'unit') return 'Add Unit';
+    return 'Register Property';
+  }
+
+  function getPageSubtitle() {
+    if (formMode === 'project') return 'Define shared building information';
+    if (formMode === 'unit' && projectData) return `Adding unit to: ${projectData.name}`;
+    return 'Fill in the details below';
+  }
+
+  function renderFormContent() {
+    const sections = getActiveSections();
+    const sectionsHtml = sections.map(section => `
+      <div class="form-section ${section.collapsed ? 'collapsed' : ''}" data-section="${section.id}">
+        <div class="form-section-header">
+          <span class="text-subheading">${section.title}</span>
+        </div>
+        <div class="form-section-body">
+          ${section.fields.map(f => renderField(f)).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    // Mode toggle (only for non-unit mode)
+    const modeToggleHtml = formMode !== 'unit' ? `
+      <div class="intake-mode-toggle" id="intake-mode-toggle">
+        <button type="button" class="mode-btn ${formMode === 'property' ? 'active' : ''}" data-mode="property">Property</button>
+        <button type="button" class="mode-btn ${formMode === 'project' ? 'active' : ''}" data-mode="project">Project</button>
+      </div>
+    ` : '';
+
+    // Project context banner (only in unit mode)
+    const projectBannerHtml = (formMode === 'unit' && projectData) ? `
+      <a href="#project/${projectIdFromUrl}" class="project-context-banner" style="text-decoration:none">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+        </svg>
+        <span>Adding unit to: <strong>${projectData.name}</strong></span>
+      </a>
+    ` : '';
+
+    container.innerHTML = `
+      <div class="page-header animate-enter">
+        <h1 class="text-display">${getPageTitle()}</h1>
+        <p class="text-label">${getPageSubtitle()}</p>
+      </div>
+      <form id="intake-form" class="animate-enter" style="--delay:100ms">
+        ${modeToggleHtml}
+        ${projectBannerHtml}
+        ${sectionsHtml}
+        <div id="form-error"></div>
+        <button type="submit" class="btn-primary" id="submit-btn">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m-6-6h12"></path></svg>
+          ${getSubmitLabel()}
+        </button>
+      </form>
+    `;
+  }
+
+  // ─── Attach all form interactions (callable after re-render) ───
+  function attachFormInteractions() {
+
+  // Section collapse toggles
   container.querySelectorAll('.form-section-header').forEach(header => {
     header.addEventListener('click', () => {
       header.parentElement.classList.toggle('collapsed');
     });
   });
+
+  // Mode Toggle Handler
+  const modeToggle = container.querySelector('#intake-mode-toggle');
+  if (modeToggle) {
+    modeToggle.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        formMode = btn.dataset.mode;
+        selectedFilesByUpload.clear();
+        renderFormContent();
+        attachFormInteractions();
+      });
+    });
+  }
 
   // ─── Generic conditional select listeners ───
   container.querySelectorAll('select').forEach(selectEl => {
@@ -581,7 +661,8 @@ export const renderIntakeForm = async (container) => {
         return Array.from(inputEl?.files || []);
       };
 
-      SECTIONS.forEach(section => {
+      const activeSections = getActiveSections();
+      activeSections.forEach(section => {
         section.fields.forEach(field => {
           if (field.type === 'toggle') {
             const group = container.querySelector(`[data-toggle="${field.name}"]`);
@@ -637,6 +718,59 @@ export const renderIntakeForm = async (container) => {
         data.longitude = Number(lng);
       }
 
+      // Handle project creation vs property/unit creation
+      if (formMode === 'project') {
+        // Create a new project
+        const projectId = await createProject(data);
+        if (typeof window.__invalidateHomeCache === 'function') {
+          window.__invalidateHomeCache();
+        }
+
+        // Handle file uploads for project (building facade, entry photos)
+        if (fileFields.length > 0) {
+          const allFiles = fileFields.flatMap(f => Array.from(f.files || []));
+          const session = createUploadSession('Project Media', allFiles);
+          let fileOffset = 0;
+          for (const field of fileFields) {
+            if (!Array.isArray(field.files) || field.files.length === 0) continue;
+            const currentOffset = fileOffset;
+            const path = `projects/${projectId}/${field.name}`;
+            try {
+              const urls = await uploadMultipleFiles(field.files, path, null, (idx, pct, status, error) => {
+                const globalIdx = currentOffset + idx;
+                if (status === 'converting') session.markConverting(globalIdx);
+                else if (status === 'error') session.markError(globalIdx, error);
+                else if (status === 'done') session.markDone(globalIdx);
+                else session.updateProgress(globalIdx, pct);
+              });
+              if (urls.length > 0) {
+                const { updateProject } = await import('../backend/projectService.js');
+                await updateProject(projectId, { [`images.${field.name}`]: urls });
+              }
+            } catch (uploadErr) {
+              console.error(`Project upload failed for ${field.name}:`, uploadErr);
+            }
+            fileOffset += field.files.length;
+          }
+          addUploadLog('Project media uploaded', 'done');
+        }
+
+        showToast('Project created successfully!', 'success');
+        window.location.hash = `#project/${projectId}`;
+        return;
+      }
+
+      // Unit under project: add projectId to data
+      if (formMode === 'unit' && projectIdFromUrl) {
+        data.projectId = projectIdFromUrl;
+        // Use unitName as the inventory doc name, fallback to project name
+        if (data.unitName) {
+          data.name = data.unitName;
+        } else if (projectData?.name) {
+          data.name = projectData.name;
+        }
+      }
+
       data.status = 'active';
       data.images = {};
       data.mediaUploadPending = fileFields.length > 0;
@@ -644,6 +778,19 @@ export const renderIntakeForm = async (container) => {
       const docId = await createInventoryItem(data);
       if (typeof window.__invalidateHomeCache === 'function') {
         window.__invalidateHomeCache();
+      }
+
+      // Update project unit count
+      if (formMode === 'unit' && projectIdFromUrl) {
+        try {
+          const { updateProject } = await import('../backend/projectService.js');
+          const currentProject = await getProjectById(projectIdFromUrl);
+          if (currentProject) {
+            await updateProject(projectIdFromUrl, { unitCount: (currentProject.unitCount || 0) + 1 });
+          }
+        } catch (e) {
+          console.warn('Could not update project unit count', e);
+        }
       }
 
       if (fileFields.length > 0) {
@@ -731,8 +878,8 @@ export const renderIntakeForm = async (container) => {
         return;
       }
 
-      showToast('Property registered successfully!', 'success');
-      window.location.hash = '#';
+      showToast(formMode === 'unit' ? 'Unit added successfully!' : 'Property registered successfully!', 'success');
+      window.location.hash = formMode === 'unit' ? `#project/${projectIdFromUrl}` : '#';
     } catch (err) {
       console.error('Submission error:', err);
       errorContainer.innerHTML = `
@@ -745,8 +892,14 @@ export const renderIntakeForm = async (container) => {
       btn.disabled = false;
       btn.innerHTML = `
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m-6-6h12"></path></svg>
-        Register New Retail Property
+        ${getSubmitLabel()}
       `;
     }
   });
+
+  } // end attachFormInteractions
+
+  // Initial render + attach
+  renderFormContent();
+  attachFormInteractions();
 };

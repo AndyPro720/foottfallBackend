@@ -15,6 +15,7 @@ import { renderLoginPage } from './pages/Login.js';
 const lazyIntakeForm = () => import('./pages/IntakeForm.js').then(m => m.renderIntakeForm);
 const lazyEditProperty = () => import('./pages/EditProperty.js').then(m => m.renderEditProperty);
 const lazyAdminPage = () => import('./pages/Admin.js').then(m => m.renderAdminPage);
+const lazyProjectDetail = () => import('./pages/ProjectDetail.js').then(m => m.renderProjectDetail);
 
 const app = document.getElementById('app');
 let topBarDocClickHandler = null;
@@ -192,11 +193,11 @@ function renderNav() {
   if (!auth.currentUser && hash !== '#login') return '';
   return `
     <nav class="bottom-nav">
-      <a href="#" class="nav-link ${hash === '#' ? 'active' : ''}">
+      <a href="#" class="nav-link ${hash === '#' || hash.startsWith('#project/') ? 'active' : ''}">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
         Home
       </a>
-      <a href="#add" class="nav-link ${hash === '#add' ? 'active' : ''}">
+      <a href="#add" class="nav-link ${hash === '#add' || hash.startsWith('#add?') ? 'active' : ''}">
         <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
         Add Property
       </a>
@@ -309,9 +310,13 @@ const router = async () => {
 
     if (hash === '#') {
       await renderHome(app, { useCache: true });
-    } else if (hash === '#add') {
+    } else if (hash === '#add' || hash.startsWith('#add?')) {
       const renderIntakeForm = await lazyIntakeForm();
       renderIntakeForm(app);
+    } else if (hash.startsWith('#project/')) {
+      const projectId = hash.split('/')[1];
+      const renderProject = await lazyProjectDetail();
+      await renderProject(app, projectId);
     } else if (hash === '#admin') {
       if (['admin', 'superadmin'].includes(window.userProfile?.role)) {
         const renderAdminPage = await lazyAdminPage();

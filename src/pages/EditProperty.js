@@ -1,7 +1,7 @@
 import { getInventoryItemById, updateInventoryItem, getInventoryItems } from '../backend/inventoryService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
 import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
-import { SECTIONS } from '../config/propertyFields.js';
+import { SECTIONS, PROJECT_FIELD_NAMES } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 import { extractFacets } from '../utils/filterEngine.js';
@@ -320,6 +320,14 @@ export const renderEditProperty = async (container, id) => {
       <h1 class="text-display">Edit Details</h1>
       <p class="text-label">${item.name}</p>
     </div>
+    ${item.projectId ? `
+      <div class="project-context-banner" style="margin-bottom:var(--space-md)">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+        </svg>
+        <span>Fields inherited from project are locked. <a href="#project/${item.projectId}" style="color:var(--accent-green);text-decoration:underline">View project</a></span>
+      </div>
+    ` : ''}
     <form id="edit-form" class="animate-enter" style="--delay:100ms">
       ${sectionsHtml}
       <div id="form-error"></div>
@@ -336,6 +344,23 @@ export const renderEditProperty = async (container, id) => {
   container.querySelectorAll('.form-section-header').forEach(header => {
     header.addEventListener('click', () => header.parentElement.classList.toggle('collapsed'));
   });
+
+  // Lock project-level fields for units under a project
+  if (item.projectId) {
+    PROJECT_FIELD_NAMES.forEach(fieldName => {
+      const input = container.querySelector(`#${fieldName}`);
+      if (input) {
+        const formGroup = input.closest('.form-group');
+        if (formGroup) formGroup.classList.add('field-locked');
+      }
+      // Handle toggle fields
+      const toggle = container.querySelector(`[data-toggle="${fieldName}"]`);
+      if (toggle) {
+        const formGroup = toggle.closest('.form-group');
+        if (formGroup) formGroup.classList.add('field-locked');
+      }
+    });
+  }
 
   // Toggle buttons
   container.querySelectorAll('.toggle-group').forEach(group => {

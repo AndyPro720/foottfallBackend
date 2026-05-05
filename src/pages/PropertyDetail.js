@@ -1,4 +1,5 @@
 import { getInventoryItemById, updateInventoryItem, deleteInventoryItem } from '../backend/inventoryService.js';
+import { getProjectById } from '../backend/projectService.js';
 import { SECTIONS } from '../config/propertyFields.js';
 import {
   getFileExtensionLabel,
@@ -270,6 +271,23 @@ export const renderPropertyDetail = async (container, id) => {
     const addedByLabel = getAddedByLabel(item);
     const allLocationDetails = getAllLocationDetails(item);
 
+    // Fetch project data if this unit belongs to a project
+    let project = null;
+    if (item.projectId) {
+      try { project = await getProjectById(item.projectId); } catch (e) { /* project may be deleted */ }
+    }
+    const projectBannerHtml = project ? `
+      <a href="#project/${item.projectId}" class="project-context-banner animate-enter" style="text-decoration:none; margin-bottom:var(--space-md)">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+        </svg>
+        <span>Part of: <strong>${project.name}</strong></span>
+        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-left:auto">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+        </svg>
+      </a>
+    ` : '';
+
     const sectionsHtml = SECTIONS.map(section => {
       if (section.id === 'photos') return renderPhotoGallery(item);
 
@@ -427,6 +445,8 @@ export const renderPropertyDetail = async (container, id) => {
         ` : ''}
       </div>
 
+
+      ${projectBannerHtml}
 
       <div class="page-header animate-enter">
         <div style="display:flex; justify-content:space-between; align-items:flex-start">
