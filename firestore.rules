@@ -114,6 +114,8 @@ service cloud.firestore {
     function inventoryAllowedKeys() {
       return [
         'name',
+        'unitName',
+        'projectId',
         'frontage',
         'vicinityBrands',
         'miscNotes',
@@ -235,8 +237,73 @@ service cloud.firestore {
     }
 
     // ===============================================================
+    // Project Validation
+    // ===============================================================
+
+    function projectsAllowedKeys() {
+      return [
+        'name',
+        'vicinityBrands',
+        'buildingType',
+        'googleMapsLink',
+        'location',
+        'city',
+        'tradeArea',
+        'buildingAge',
+        'contactName',
+        'contactDesignation',
+        'contactInfo',
+        'latitude',
+        'longitude',
+        'unitCount',
+        'images',
+        'status',
+        'createdBy',
+        'creatorEmail',
+        'creatorName',
+        'created_at',
+        'updated_at'
+      ];
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasOnly(projectsAllowedKeys()) &&
+        data.keys().hasAll(['name', 'createdBy', 'creatorEmail', 'creatorName', 'created_at', 'updated_at']) &&
+        data.name is string &&
+        data.name.size() > 0 &&
+        data.name.size() <= 200 &&
+        data.createdBy is string &&
+        data.creatorEmail is string &&
+        data.creatorName is string;
+    }
+
+    function projectImmutableFieldsUnchanged() {
+      return request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.creatorEmail == resource.data.creatorEmail &&
+        request.resource.data.creatorName == resource.data.creatorName &&
+        request.resource.data.created_at == resource.data.created_at;
+    }
+
+    // ===============================================================
     // Collection Rules
     // ===============================================================
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated() &&
+        (isAdmin() || resource.data.createdBy == request.auth.uid);
+
+      allow create: if isActive() &&
+        isValidProject(request.resource.data) &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      allow update: if isActive() &&
+        isValidProject(request.resource.data) &&
+        projectImmutableFieldsUnchanged() &&
+        (isAdmin() || resource.data.createdBy == request.auth.uid);
+
+      allow delete: if isActive() &&
+        (isAdmin() || resource.data.createdBy == request.auth.uid);
+    }
 
     match /users/{userId} {
       allow read: if isOwner(userId) ||

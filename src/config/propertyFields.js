@@ -1,5 +1,5 @@
 // ─── Shared Property Field Definitions ───
-// Used for Intake Form, Edit Form, and Detail View
+// Used for Intake Form, Edit Form, Detail View, and Project workflows
 
 export const SECTIONS = [
   {
@@ -86,3 +86,116 @@ export const SECTIONS = [
     ]
   }
 ];
+
+// ─── Project-Level Field Definitions ───
+// Fields shared across all units in a project (building/complex level)
+
+export const PROJECT_SECTIONS = [
+  {
+    id: 'project-info',
+    title: 'Project Information',
+    collapsed: false,
+    fields: [
+      { name: 'name', label: 'Project / Building Name', type: 'text', required: true, placeholder: 'e.g., Phoenix Mall' },
+      { name: 'vicinityBrands', label: 'Vicinity Brands', type: 'text', placeholder: 'e.g., Starbucks, Zara, H&M' },
+      { name: 'buildingType', label: 'Building Type', type: 'select', options: ['Mall', 'Standalone', 'High Street'], required: false },
+      { name: 'entryToBuilding', label: 'Entry to Building Photo', type: 'file', accept: 'image/*,video/*', multiple: true },
+      { name: 'googleMapsLink', label: 'Google Map Link', type: 'text', placeholder: 'Paste Google Maps URL' },
+      { name: 'location', label: 'Exact Location / Address', type: 'text', required: false, placeholder: 'Full address' },
+      { name: 'city', label: 'City', type: 'creatable-select', required: false, placeholder: 'e.g., Pune, Mumbai' },
+      { name: 'tradeArea', label: 'Trade Area', type: 'creatable-select', placeholder: 'e.g., MG Road, Connaught Place' },
+      { name: 'buildingAge', label: 'Age of Building (years)', type: 'number', placeholder: 'Approximate age' },
+    ]
+  },
+  {
+    id: 'project-contact',
+    title: 'Contact Details',
+    collapsed: true,
+    fields: [
+      { name: 'contactName', label: 'Contact Name', type: 'text', required: false, placeholder: 'Full name' },
+      { name: 'contactDesignation', label: 'Designation', type: 'text', placeholder: 'e.g., Leasing Manager' },
+      { name: 'contactInfo', label: 'Phone / Email', type: 'text', required: false, placeholder: '+91 XXXXX XXXXX' },
+    ]
+  },
+  {
+    id: 'project-photos',
+    title: 'Building Photos',
+    collapsed: true,
+    fields: [
+      { name: 'buildingFacade', label: 'Building Facade', type: 'file', accept: 'image/*,video/*', multiple: true },
+    ]
+  }
+];
+
+// Quick lookup set for determining if a field belongs to the project level
+export const PROJECT_FIELD_NAMES = new Set(
+  PROJECT_SECTIONS.flatMap(s => s.fields.map(f => f.name))
+);
+
+// ─── Unit-Only Field Definitions ───
+// Fields specific to individual units when adding under a project
+
+export const UNIT_ONLY_SECTIONS = [
+  {
+    id: 'unit-info',
+    title: 'Unit Information',
+    collapsed: false,
+    fields: [
+      { name: 'unitName', label: 'Unit Name / Number', type: 'text', required: true, placeholder: 'e.g., Unit 204, Shop G-12' },
+      { name: 'size', label: 'Carpet Area (sq ft)', type: 'number', required: false, placeholder: 'Carpet area' },
+      { name: 'floor', label: 'Which Floor', type: 'text', placeholder: 'e.g., Ground, 1st, 2nd' },
+      { name: 'frontage', label: 'Frontage (ft)', type: 'text', placeholder: 'e.g., 25 ft' },
+      { name: 'propertyStatus', label: 'Property Status', type: 'select', options: ['Occupied', 'Available', 'Under Construction'], required: false },
+      { name: 'completionTime', label: 'Completion Time (Months)', type: 'number', placeholder: 'Months to completion', conditionalOn: { field: 'propertyStatus', value: 'Under Construction' } },
+      { name: 'suitableFor', label: 'Suitable For', type: 'text', placeholder: 'e.g., F&B, Retail, Services' },
+      { name: 'miscNotes', label: 'Misc Notes', type: 'text', placeholder: 'Any additional notes...' },
+    ]
+  },
+  {
+    id: 'unit-specs',
+    title: 'Unit Specifications',
+    collapsed: false,
+    fields: [
+      { name: 'price', label: 'Price per Sq Ft (₹)', type: 'number', required: false, placeholder: '₹/sqft' },
+      { name: 'priceNegotiability', label: 'Price Negotiability', type: 'select', options: ['Negotiable', 'Slightly Negotiable', 'Non Negotiable', 'N/A'], required: false },
+      { name: 'cam', label: 'CAM (₹/sqft)', type: 'number', placeholder: 'Common Area Maintenance' },
+      { name: 'mergable', label: 'Mergable (Expandable Sq Ft)', type: 'toggle' },
+      { name: 'mezzanine', label: 'Mezzanine Available', type: 'toggle' },
+      { name: 'mezzanineSize', label: 'Mezzanine Size (sq ft)', type: 'number', placeholder: 'Size in sqft', conditionalOn: { field: 'mezzanine', value: 'yes' } },
+      { name: 'clearHeight', label: 'Total Clear Height (ft)', type: 'number', placeholder: 'Floor to ceiling' },
+      { name: 'clearHeightUnderMezz', label: 'Clear Height Under Mezzanine (ft)', type: 'number', placeholder: 'Floor to Mezzanine', conditionalOn: { field: 'mezzanine', value: 'yes' } },
+      { name: 'clearHeightAboveMezz', label: 'Clear Height Above Mezzanine (ft)', type: 'number', placeholder: 'Mezzanine to ceiling', conditionalOn: { field: 'mezzanine', value: 'yes' } },
+      { name: 'connectedLoad', label: 'Connected Load (KW)', type: 'number', placeholder: 'Electrical load' },
+    ]
+  },
+  {
+    id: 'unit-facilities',
+    title: 'Facilities',
+    collapsed: true,
+    fields: [
+      { name: 'parking', label: 'Parking Space', type: 'toggle', hasCount: true, countLabel: 'Number of spots', hasPhoto: true },
+      { name: 'outsideSpace', label: 'Outside Space', type: 'toggle', hasPhoto: true },
+      { name: 'serviceEntry', label: 'Service Entry', type: 'toggle', hasPhoto: true },
+      { name: 'liftAccess', label: 'Lift Access', type: 'toggle', hasPhoto: true },
+      { name: 'bohSpace', label: 'BOH Space', type: 'toggle', hasPhoto: true },
+      { name: 'fireExit', label: 'Fire Exit', type: 'toggle' },
+      { name: 'ocFile', label: 'OC File Upload', type: 'file', accept: 'image/*,video/*,.pdf', multiple: true },
+    ]
+  },
+  {
+    id: 'unit-photos',
+    title: 'Photos, Videos & Documents',
+    collapsed: true,
+    fields: [
+      { name: 'unitFacade', label: 'Unit Facade', type: 'file', accept: 'image/*,video/*', multiple: true },
+      { name: 'interior', label: 'Interior', type: 'file', accept: 'image/*,video/*', multiple: true },
+      { name: 'signage', label: 'Signage', type: 'file', accept: 'image/*,video/*', multiple: true },
+      { name: 'floorPlan', label: 'Floor Plan', type: 'file', accept: 'image/*,video/*,.pdf', multiple: true },
+      { name: 'cadFiles', label: 'CAD Files', type: 'file', accept: '.dwg,.dxf', multiple: true },
+      { name: 'presentationAvailable', label: 'Presentation Available', type: 'toggle' },
+      { name: 'presentationLink', label: 'Presentation Link', type: 'text', placeholder: 'Paste presentation URL', conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
+      { name: 'presentationFile', label: 'Presentation Attachment', type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,image/*,video/*', multiple: true, conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
+    ]
+  }
+];
+
