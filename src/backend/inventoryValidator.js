@@ -7,7 +7,7 @@
  */
 
 const INVENTORY_ALLOWED_KEYS = new Set([
-  'name', 'frontage', 'vicinityBrands', 'miscNotes', 'propertyStatus',
+  'name', 'unitName', 'projectId', 'frontage', 'vicinityBrands', 'miscNotes', 'propertyStatus',
   'completionTime', 'partOC', 'completeOC', 'buildingType', 'size',
   'floor', 'googleMapsLink', 'location', 'city', 'tradeArea',
   'suitableFor', 'presentationAvailable', 'presentationLink',
@@ -27,7 +27,7 @@ const REQUIRED_KEYS = ['name', 'status', 'createdBy', 'creatorEmail', 'creatorNa
 const URL_PATTERN = /^https?:\/\//;
 
 const OPTIONAL_STRING_FIELDS = {
-  name: 200, frontage: 100, vicinityBrands: 1000, miscNotes: 5000,
+  name: 200, unitName: 200, projectId: 200, frontage: 100, vicinityBrands: 1000, miscNotes: 5000,
   partOC: 200, completeOC: 200, floor: 100, propertyStatus: 100,
   buildingType: 100, priceNegotiability: 100, location: 2000,
   city: 120, tradeArea: 200, suitableFor: 1000, contactName: 200,
