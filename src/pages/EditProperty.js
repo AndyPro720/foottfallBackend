@@ -2,7 +2,7 @@ import { getInventoryItemById, updateInventoryItem, getInventoryItems } from '..
 import { getProjectById, updateProject } from '../backend/projectService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
 import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
-import { SECTIONS, PROJECT_FIELD_NAMES } from '../config/propertyFields.js';
+import { SECTIONS, PROJECT_SECTIONS, PROJECT_FIELD_NAMES } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 import { extractFacets } from '../utils/filterEngine.js';

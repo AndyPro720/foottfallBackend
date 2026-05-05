@@ -264,7 +264,8 @@ export const renderIntakeForm = async (container) => {
 
   function getActiveSections() {
     if (formMode === 'project') return PROJECT_SECTIONS;
-    if (formMode === 'unit') return UNIT_ONLY_SECTIONS;
+    if (formMode === 'unit' && selectedProjectId) return UNIT_ONLY_SECTIONS;
+    if (formMode === 'unit' && !selectedProjectId) return []; // Should not happen
     return SECTIONS;
   }
 
@@ -299,33 +300,39 @@ export const renderIntakeForm = async (container) => {
       </div>
     `).join('');
 
-    // Mode toggle (only for non-unit mode)
-    const modeToggleHtml = formMode !== 'unit' ? `
+    // Mode toggle
+    const modeToggleHtml = !projectIdFromUrl ? `
       <div class="intake-mode-toggle" id="intake-mode-toggle">
         <button type="button" class="mode-btn ${formMode === 'property' ? 'active' : ''}" data-mode="property">Property</button>
-        <button type="button" class="mode-btn ${formMode === 'project' ? 'active' : ''}" data-mode="project">Project</button>
+        <button type="button" class="mode-btn ${['project', 'unit'].includes(formMode) ? 'active' : ''}" data-mode="project">Project</button>
       </div>
     ` : '';
 
-    // Project context banner (only in unit mode)
+    // Project context banner (if a project is selected for a new unit)
     const projectBannerHtml = (formMode === 'unit' && projectData) ? `
-      <a href="#project/${projectIdFromUrl || selectedProjectId}" class="project-context-banner" style="text-decoration:none">
-        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
-        </svg>
-        <span>Adding unit to: <strong>${projectData.name}</strong></span>
-      </a>
+      <div class="project-context-banner" style="margin-bottom:var(--space-md); display:flex; justify-content:space-between; align-items:center;">
+        <a href="#project/${projectIdFromUrl || selectedProjectId}" style="text-decoration:none; display:flex; gap:8px; align-items:center;">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+          </svg>
+          <span>Adding unit to: <strong>${projectData.name}</strong></span>
+        </a>
+        ${!projectIdFromUrl ? `<button type="button" class="btn-secondary btn-sm" id="clear-project-btn" style="padding:4px 8px; min-height:auto; font-size:10px">Clear</button>` : ''}
+      </div>
     ` : '';
 
-    // Project selector (in property mode, if projects exist)
-    const projectSelectorHtml = (formMode === 'property' && allProjects.length > 0) ? `
+    // Project selector (in project mode, if no project is selected yet)
+    const projectSelectorHtml = (formMode === 'project' && allProjects.length > 0) ? `
       <div class="form-group" style="margin-bottom:var(--space-md)">
-        <label class="form-label">Link to existing project (optional)</label>
-        <select class="form-input form-select" id="project-selector">
-          <option value="">— Standalone property —</option>
-          ${allProjects.map(p => `<option value="${p.id}">${p.name}${p.city ? ` (${p.city})` : ''}</option>`).join('')}
-        </select>
-        <p class="text-caption" style="margin-top:4px;color:var(--text-tertiary)">Select a project to add a unit under it</p>
+        <label class="form-label" style="display:flex; justify-content:space-between">
+          <span>Link new unit to existing project</span>
+          <span class="text-caption" style="opacity:0.6; font-weight:normal;">or fill below to create a new one</span>
+        </label>
+        <input class="form-input" id="project-selector" placeholder="Search projects by name or city..." autocomplete="off" />
+      </div>
+      <div class="form-divider" style="margin:var(--space-lg) 0; position:relative; text-align:center;">
+         <div style="border-top:1px solid var(--border-color); position:absolute; top:50%; width:100%;"></div>
+         <span style="background:var(--bg-surface); padding:0 8px; position:relative; font-size:12px; color:var(--text-tertiary);">CREATE NEW PROJECT</span>
       </div>
     ` : '';
 
@@ -363,9 +370,15 @@ export const renderIntakeForm = async (container) => {
   if (modeToggle) {
     modeToggle.querySelectorAll('.mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        formMode = btn.dataset.mode;
-        selectedProjectId = null;
-        projectData = null;
+        const mode = btn.dataset.mode;
+        if (mode === 'property') {
+          formMode = 'property';
+          selectedProjectId = null;
+          projectData = null;
+        } else {
+          // 'project' button clicked
+          formMode = selectedProjectId ? 'unit' : 'project';
+        }
         selectedFilesByUpload.clear();
         renderFormContent();
         attachFormInteractions();
@@ -373,24 +386,40 @@ export const renderIntakeForm = async (container) => {
     });
   }
 
-  // Project Selector Handler (in property mode)
+  // Project Selector Handler (in project mode)
   const projectSelector = container.querySelector('#project-selector');
   if (projectSelector) {
-    projectSelector.addEventListener('change', async () => {
-      const pid = projectSelector.value;
-      if (pid) {
-        selectedProjectId = pid;
-        try {
-          projectData = await getProjectById(pid);
-        } catch (e) {
-          projectData = allProjects.find(p => p.id === pid) || null;
+    const options = allProjects.map(p => `${p.name}${p.city ? ` (${p.city})` : ''}`);
+    initCreatableSelect(projectSelector, options, {
+      onChange: (val) => {
+        if (!val) return;
+        const p = allProjects.find(x => `${x.name}${x.city ? ` (${x.city})` : ''}` === val);
+        if (p) {
+          selectedProjectId = p.id;
+          projectData = p;
+          formMode = 'unit'; // Switch to unit mode
+          selectedFilesByUpload.clear();
+          renderFormContent();
+          attachFormInteractions();
+        } else {
+          projectSelector.value = '';
         }
-        formMode = 'unit';
-        selectedFilesByUpload.clear();
-        renderFormContent();
-        attachFormInteractions();
       }
     });
+  }
+
+  // Clear Project Handler
+  const clearProjectBtn = container.querySelector('#clear-project-btn');
+  if (clearProjectBtn) {
+    clearProjectBtn.onclick = (e) => {
+      e.preventDefault();
+      selectedProjectId = null;
+      projectData = null;
+      formMode = 'project';
+      selectedFilesByUpload.clear();
+      renderFormContent();
+      attachFormInteractions();
+    };
   }
 
   // ─── Generic conditional select listeners ───

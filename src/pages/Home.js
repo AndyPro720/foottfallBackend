@@ -998,7 +998,7 @@ function attachHomeInteractions(container, renderFn) {
         toggleChipFilter(type, value);
       }
       
-      if (type === 'city' || type === 'tradeArea') {
+      if (type === 'city' || type === 'tradeArea' || type === 'typeMode') {
         syncAdvancedInputsToState();
         renderFn();
         openFilterPanel();
@@ -1094,7 +1094,8 @@ function refreshAdvancedChipStates(container) {
     const type = chip.dataset.advType;
     const value = chip.dataset.advValue;
     let isActive = false;
-    if (type === 'mezzanine') isActive = filterState.mezzanine === value;
+    if (type === 'typeMode') isActive = filterTypeMode === value;
+    else if (type === 'mezzanine') isActive = filterState.mezzanine === value;
     else if (type === 'hasPhotos') isActive = filterState.hasPhotos === value;
     else if (type === 'createdBy') isActive = filterState.createdByUids.includes(value);
     else if (type === 'buildingType') isActive = filterState.buildingTypes.includes(value);
