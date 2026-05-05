@@ -196,8 +196,7 @@ function buildCardHtml(item, i) {
   const propStatusClass = isOccupied ? 'card-occupied' : isUnderConstruction ? 'card-construction' : '';
   const isMergeable = item.mergable === true || String(item.mergable || '').toLowerCase() === 'yes';
   const isAdminViewer = ['admin', 'superadmin'].includes(window.userProfile?.role);
-  const creatorRole = cachedUserRoleMap[item.createdBy] || '';
-  const isAgentAdded = isAdminViewer && creatorRole === 'agent';
+  const isBroker = String(item.contactDesignation || '').toLowerCase() === 'broker';
   const locationHtml = locationSummary
     ? `<p class="text-label ${primaryLocationLink ? 'card-location-link' : ''}" ${primaryLocationLink ? `data-map-link="${primaryLocationLink}"` : ''} style="margin-top:var(--space-xs)">${locationSummary}</p>`
     : '<p class="text-label" style="margin-top:var(--space-xs)">No location</p>';
@@ -209,7 +208,7 @@ function buildCardHtml(item, i) {
         <div class="card-header" style="display:flex; gap:var(--space-md); align-items:flex-start">
           <div class="card-thumbnail-wrapper property-card-thumbnail">
           ${renderCardThumbnail(item, firstVisualUrl, firstFallbackUrl)}
-          ${isAgentAdded ? '<div class="agent-source-marker" title="Added by agent" aria-label="Added by agent">A</div>' : ''}
+          ${isBroker ? '<div class="agent-source-marker" title="Broker" aria-label="Broker">B</div>' : ''}
           ${isMergeable ? `
             <div class="mergeable-badge" title="Mergeable Unit" aria-label="Mergeable Unit">
               <svg class="mergeable-icon" viewBox="0 0 120 60" fill="none" xmlns="http://www.w3.org/2000/svg">

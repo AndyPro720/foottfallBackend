@@ -34,7 +34,7 @@ export const SECTIONS = [
     collapsed: true,
     fields: [
       { name: 'contactName', label: 'Contact Name', type: 'text', required: false, placeholder: 'Full name' },
-      { name: 'contactDesignation', label: 'Designation', type: 'text', placeholder: 'e.g., Leasing Manager' },
+      { name: 'contactDesignation', label: 'Designation', type: 'select', options: ['Landlord', 'Sales representative', 'Broker'], required: false },
       { name: 'contactInfo', label: 'Phone / Email', type: 'text', required: false, placeholder: '+91 XXXXX XXXXX' },
     ]
   },
@@ -113,7 +113,7 @@ export const PROJECT_SECTIONS = [
     collapsed: true,
     fields: [
       { name: 'contactName', label: 'Contact Name', type: 'text', required: false, placeholder: 'Full name' },
-      { name: 'contactDesignation', label: 'Designation', type: 'text', placeholder: 'e.g., Leasing Manager' },
+      { name: 'contactDesignation', label: 'Designation', type: 'select', options: ['Landlord', 'Sales representative', 'Broker'], required: false },
       { name: 'contactInfo', label: 'Phone / Email', type: 'text', required: false, placeholder: '+91 XXXXX XXXXX' },
     ]
   },

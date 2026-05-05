@@ -317,7 +317,7 @@ export const renderIntakeForm = async (container) => {
           </svg>
           <span>Adding unit to: <strong>${projectData.name}</strong></span>
         </a>
-        ${!projectIdFromUrl ? `<button type="button" class="btn-secondary btn-sm" id="clear-project-btn" style="padding:4px 8px; min-height:auto; font-size:10px">Clear</button>` : ''}
+        ${!projectIdFromUrl ? `<button type="button" id="clear-project-btn" style="background:transparent; border:none; color:var(--text-secondary); text-decoration:underline; cursor:pointer; font-size:12px; padding:0 8px;">Clear</button>` : ''}
       </div>
     ` : '';
 

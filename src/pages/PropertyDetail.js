@@ -1,4 +1,4 @@
-import { getInventoryItemById, updateInventoryItem, deleteInventoryItem } from '../backend/inventoryService.js';
+import { getInventoryItemById, updateInventoryItem, deleteInventoryItem, createInventoryItem } from '../backend/inventoryService.js';
 import { getProjectById } from '../backend/projectService.js';
 import { SECTIONS } from '../config/propertyFields.js';
 import {
@@ -505,9 +505,10 @@ export const renderPropertyDetail = async (container, id) => {
       <div class="page-content">
         ${sectionsHtml}
 
-        <div style="margin-top: var(--space-xl); display: flex; gap: var(--space-md)">
-           <a href="#edit/${item.id}" class="btn-secondary" style="flex:1">Edit Details</a>
-           <button class="btn-secondary destructive" style="flex:1; border-color: var(--destructive); color: var(--destructive)" id="delete-btn">Delete Property</button>
+        <div style="margin-top: var(--space-xl); display: flex; gap: var(--space-md); flex-wrap: wrap;">
+           <a href="#edit/${item.id}" class="btn-secondary" style="flex:1; min-width:100px;">Edit Details</a>
+           <button class="btn-secondary" id="duplicate-btn" style="flex:1; min-width:100px;">Duplicate</button>
+           <button class="btn-secondary destructive" style="flex:1; border-color: var(--destructive); color: var(--destructive); min-width:100px;" id="delete-btn">Delete</button>
         </div>
       </div>
     `;
@@ -661,6 +662,46 @@ export const renderPropertyDetail = async (container, id) => {
         showToast('Failed to update status', 'error');
       }
     };
+
+    // ─── Duplicate handler ───
+    const duplicateBtn = document.getElementById('duplicate-btn');
+    if (duplicateBtn) {
+      duplicateBtn.onclick = async () => {
+        const { showToast } = await import('../utils/ui.js');
+        if (confirm('Are you sure you want to duplicate this property?')) {
+          try {
+            duplicateBtn.disabled = true;
+            duplicateBtn.textContent = 'Duplicating...';
+            
+            const cloneData = { ...item };
+            delete cloneData.id;
+            delete cloneData.created_at;
+            delete cloneData.updated_at;
+            
+            let baseName = cloneData.name || 'Unnamed Property';
+            const copyMatch = baseName.match(/ Copy( \d+)?$/);
+            let copyNumber = 1;
+            if (copyMatch) {
+              baseName = baseName.slice(0, copyMatch.index);
+              if (copyMatch[1]) {
+                copyNumber = parseInt(copyMatch[1].trim()) + 1;
+              } else {
+                copyNumber = 2;
+              }
+            }
+            cloneData.name = `${baseName} Copy${copyNumber > 1 ? ` ${copyNumber}` : ''}`;
+            
+            const newId = await createInventoryItem(cloneData);
+            showToast('Property duplicated successfully', 'success');
+            window.location.hash = `#property/${newId}`;
+          } catch (err) {
+            showToast('Failed to duplicate: ' + err.message, 'error');
+            duplicateBtn.disabled = false;
+            duplicateBtn.textContent = 'Duplicate';
+          }
+        }
+      };
+    }
 
     // ─── Delete handler ───
     document.getElementById('delete-btn').onclick = async () => {
