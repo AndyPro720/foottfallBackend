@@ -7,5 +7,9 @@ service firebase.storage {
       // Allow write during PWA sessions (Internal use)
       allow write: if true; 
     }
+    match /projects/{projectId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

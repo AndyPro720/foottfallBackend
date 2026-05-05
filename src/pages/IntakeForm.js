@@ -1,5 +1,5 @@
 import { createInventoryItem, updateInventoryItem, getInventoryItems } from '../backend/inventoryService.js';
-import { createProject, getProjectById } from '../backend/projectService.js';
+import { createProject, getProjectById, getProjects } from '../backend/projectService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
 import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
 import { SECTIONS, PROJECT_SECTIONS, UNIT_ONLY_SECTIONS } from '../config/propertyFields.js';
@@ -235,6 +235,7 @@ export const renderIntakeForm = async (container) => {
   const urlParams = new URLSearchParams(hashParts[1] || '');
   const projectIdFromUrl = urlParams.get('projectId');
   let projectData = null;
+  let selectedProjectId = projectIdFromUrl || null;
   let formMode = projectIdFromUrl ? 'unit' : 'property'; // 'property' | 'project' | 'unit'
 
   // Load project data if adding a unit under a project
@@ -248,10 +249,15 @@ export const renderIntakeForm = async (container) => {
 
   let facets = {};
   let cityTradeAreaMap = {};
+  let allProjects = [];
   try {
-    const items = await getInventoryItems({});
+    const [items, projects] = await Promise.all([
+      getInventoryItems({}),
+      getProjects().catch(() => [])
+    ]);
     facets = extractFacets(items);
     cityTradeAreaMap = facets.cityTradeAreaMap || {};
+    allProjects = Array.isArray(projects) ? projects : [];
   } catch (err) {
     console.warn("Could not fetch inventory for autocomplete", err);
   }
@@ -303,12 +309,24 @@ export const renderIntakeForm = async (container) => {
 
     // Project context banner (only in unit mode)
     const projectBannerHtml = (formMode === 'unit' && projectData) ? `
-      <a href="#project/${projectIdFromUrl}" class="project-context-banner" style="text-decoration:none">
+      <a href="#project/${projectIdFromUrl || selectedProjectId}" class="project-context-banner" style="text-decoration:none">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
         </svg>
         <span>Adding unit to: <strong>${projectData.name}</strong></span>
       </a>
+    ` : '';
+
+    // Project selector (in property mode, if projects exist)
+    const projectSelectorHtml = (formMode === 'property' && allProjects.length > 0) ? `
+      <div class="form-group" style="margin-bottom:var(--space-md)">
+        <label class="form-label">Link to existing project (optional)</label>
+        <select class="form-input form-select" id="project-selector">
+          <option value="">— Standalone property —</option>
+          ${allProjects.map(p => `<option value="${p.id}">${p.name}${p.city ? ` (${p.city})` : ''}</option>`).join('')}
+        </select>
+        <p class="text-caption" style="margin-top:4px;color:var(--text-tertiary)">Select a project to add a unit under it</p>
+      </div>
     ` : '';
 
     container.innerHTML = `
@@ -318,6 +336,7 @@ export const renderIntakeForm = async (container) => {
       </div>
       <form id="intake-form" class="animate-enter" style="--delay:100ms">
         ${modeToggleHtml}
+        ${projectSelectorHtml}
         ${projectBannerHtml}
         ${sectionsHtml}
         <div id="form-error"></div>
@@ -345,10 +364,32 @@ export const renderIntakeForm = async (container) => {
     modeToggle.querySelectorAll('.mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         formMode = btn.dataset.mode;
+        selectedProjectId = null;
+        projectData = null;
         selectedFilesByUpload.clear();
         renderFormContent();
         attachFormInteractions();
       });
+    });
+  }
+
+  // Project Selector Handler (in property mode)
+  const projectSelector = container.querySelector('#project-selector');
+  if (projectSelector) {
+    projectSelector.addEventListener('change', async () => {
+      const pid = projectSelector.value;
+      if (pid) {
+        selectedProjectId = pid;
+        try {
+          projectData = await getProjectById(pid);
+        } catch (e) {
+          projectData = allProjects.find(p => p.id === pid) || null;
+        }
+        formMode = 'unit';
+        selectedFilesByUpload.clear();
+        renderFormContent();
+        attachFormInteractions();
+      }
     });
   }
 
@@ -761,8 +802,8 @@ export const renderIntakeForm = async (container) => {
       }
 
       // Unit under project: add projectId to data
-      if (formMode === 'unit' && projectIdFromUrl) {
-        data.projectId = projectIdFromUrl;
+      if (formMode === 'unit' && selectedProjectId) {
+        data.projectId = selectedProjectId;
         // Use unitName as the inventory doc name, fallback to project name
         if (data.unitName) {
           data.name = data.unitName;
@@ -781,12 +822,12 @@ export const renderIntakeForm = async (container) => {
       }
 
       // Update project unit count
-      if (formMode === 'unit' && projectIdFromUrl) {
+      if (formMode === 'unit' && selectedProjectId) {
         try {
           const { updateProject } = await import('../backend/projectService.js');
-          const currentProject = await getProjectById(projectIdFromUrl);
+          const currentProject = await getProjectById(selectedProjectId);
           if (currentProject) {
-            await updateProject(projectIdFromUrl, { unitCount: (currentProject.unitCount || 0) + 1 });
+            await updateProject(selectedProjectId, { unitCount: (currentProject.unitCount || 0) + 1 });
           }
         } catch (e) {
           console.warn('Could not update project unit count', e);
@@ -879,7 +920,7 @@ export const renderIntakeForm = async (container) => {
       }
 
       showToast(formMode === 'unit' ? 'Unit added successfully!' : 'Property registered successfully!', 'success');
-      window.location.hash = formMode === 'unit' ? `#project/${projectIdFromUrl}` : '#';
+      window.location.hash = formMode === 'unit' ? `#project/${selectedProjectId}` : '#';
     } catch (err) {
       console.error('Submission error:', err);
       errorContainer.innerHTML = `

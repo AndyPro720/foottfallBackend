@@ -1,4 +1,5 @@
-import { getProjectById, getProjectUnits } from '../backend/projectService.js';
+import { getProjectById, getProjectUnits, deleteProject, updateProject } from '../backend/projectService.js';
+import { deleteInventoryItem } from '../backend/inventoryService.js';
 
 /**
  * Renders the Project Detail view showing project info + unit list.
@@ -113,7 +114,50 @@ export async function renderProjectDetail(container, projectId) {
         </div>
         ${unitsHtml}
       </div>
+
+      <div style="margin-top: var(--space-xl); display: flex; gap: var(--space-md)">
+        <button class="btn-secondary" style="flex:1" id="edit-project-btn">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+          Edit Project
+        </button>
+        <button class="btn-secondary destructive" style="flex:1; border-color: var(--destructive); color: var(--destructive)" id="delete-project-btn">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          Delete Project
+        </button>
+      </div>
     `;
+
+    // Edit Project handler - navigate to a project edit form
+    document.getElementById('edit-project-btn').onclick = () => {
+      renderProjectEditInline(container, projectId, project);
+    };
+
+    // Delete Project handler
+    document.getElementById('delete-project-btn').onclick = async () => {
+      const unitCount = units.length;
+      const confirmMsg = unitCount > 0
+        ? `Delete this project and unlink its ${unitCount} unit(s)? The units will become standalone properties. This cannot be undone.`
+        : 'Delete this project? This cannot be undone.';
+      if (!confirm(confirmMsg)) return;
+
+      try {
+        // Unlink units from project (remove projectId)
+        for (const unit of units) {
+          try {
+            const { updateInventoryItem } = await import('../backend/inventoryService.js');
+            await updateInventoryItem(unit.id, { projectId: null });
+          } catch (e) { console.warn('Failed to unlink unit', unit.id, e); }
+        }
+        await deleteProject(projectId);
+        if (typeof window.__invalidateHomeCache === 'function') window.__invalidateHomeCache();
+        const { showToast } = await import('../utils/ui.js');
+        showToast('Project deleted', 'success');
+        window.location.hash = '#';
+      } catch (err) {
+        const { showToast } = await import('../utils/ui.js');
+        showToast('Failed to delete project: ' + (err.message || ''), 'error');
+      }
+    };
   } catch (error) {
     console.error('Failed to load project:', error);
     container.innerHTML = `
@@ -188,4 +232,105 @@ function buildUnitCard(unit) {
 function escHtml(str) {
   if (!str) return '';
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * Renders an inline edit form for project fields.
+ */
+async function renderProjectEditInline(container, projectId, project) {
+  const { PROJECT_SECTIONS } = await import('../config/propertyFields.js');
+
+  // Build simple form fields from PROJECT_SECTIONS
+  const fieldsHtml = PROJECT_SECTIONS.map(section => {
+    const sectionFields = section.fields.filter(f => f.type !== 'file').map(f => {
+      const val = project[f.name] || '';
+      if (f.type === 'select') {
+        return `
+          <div class="form-group">
+            <label class="form-label" for="proj-${f.name}">${f.label}</label>
+            <select class="form-input form-select" id="proj-${f.name}" name="${f.name}">
+              <option value="">Select...</option>
+              ${f.options.map(o => `<option value="${o}" ${o === val ? 'selected' : ''}>${o}</option>`).join('')}
+            </select>
+          </div>
+        `;
+      }
+      return `
+        <div class="form-group">
+          <label class="form-label" for="proj-${f.name}">${f.label}</label>
+          <input class="form-input" type="${f.type || 'text'}" id="proj-${f.name}" name="${f.name}" value="${escHtml(String(val))}" placeholder="${f.placeholder || ''}" />
+        </div>
+      `;
+    }).join('');
+    if (!sectionFields) return '';
+    return `
+      <div class="form-section" data-section="${section.id}">
+        <div class="form-section-header"><span class="text-subheading">${section.title}</span></div>
+        <div class="form-section-body">${sectionFields}</div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <button class="back-btn" id="cancel-edit-btn">
+      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+      Cancel
+    </button>
+    <div class="page-header animate-enter">
+      <h1 class="text-display">Edit Project</h1>
+      <p class="text-label">${escHtml(project.name)}</p>
+    </div>
+    <form id="project-edit-form" class="animate-enter" style="--delay:100ms">
+      ${fieldsHtml}
+      <div id="form-error"></div>
+      <div style="display: flex; gap: var(--space-md)">
+        <button type="submit" class="btn-primary" id="save-project-btn" style="flex: 2">Save Changes</button>
+        <button type="button" class="btn-secondary" id="cancel-project-btn" style="flex: 1">Cancel</button>
+      </div>
+    </form>
+  `;
+
+  // Section collapse toggles
+  container.querySelectorAll('.form-section-header').forEach(header => {
+    header.addEventListener('click', () => header.parentElement.classList.toggle('collapsed'));
+  });
+
+  // Cancel buttons
+  document.getElementById('cancel-edit-btn').onclick = () => renderProjectDetail(container, projectId);
+  document.getElementById('cancel-project-btn').onclick = () => renderProjectDetail(container, projectId);
+
+  // Submit handler
+  document.getElementById('project-edit-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('save-project-btn');
+    btn.classList.add('btn-loading');
+    btn.disabled = true;
+
+    try {
+      const data = {};
+      PROJECT_SECTIONS.forEach(section => {
+        section.fields.forEach(field => {
+          if (field.type === 'file') return;
+          const input = container.querySelector(`#proj-${field.name}`);
+          if (!input) return;
+          const val = input.value;
+          if (val === '') return;
+          data[field.name] = field.type === 'number' ? Number(val) : val;
+        });
+      });
+
+      await updateProject(projectId, data);
+      if (typeof window.__invalidateHomeCache === 'function') window.__invalidateHomeCache();
+      const { showToast } = await import('../utils/ui.js');
+      showToast('Project updated!', 'success');
+      renderProjectDetail(container, projectId);
+    } catch (err) {
+      const errorContainer = document.getElementById('form-error');
+      errorContainer.innerHTML = `<div class="error-inline"><span>⚠</span><span>${err.message || 'Failed to save.'}</span></div>`;
+      btn.classList.remove('btn-loading');
+      btn.disabled = false;
+    }
+  };
 }

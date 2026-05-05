@@ -68,6 +68,16 @@
 
 ---
 
+### Phase 10.1: Project-Based Property Grouping & Unit Management (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 10
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 10.1 to break down)
+
 ### Phase 11: Desktop Dashboard
 **Status**: 🔲 Not Started
 **Objective**: Build a desktop-optimized dashboard page with responsive grid layout, sidebar/top-bar multi-field filtering, and keyword search across all text fields.

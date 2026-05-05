@@ -24,6 +24,7 @@ let cachedProjects = null;    // Projects cache
 let cachedUserNameMap = {};
 let cachedUserRoleMap = {};
 let filterState = createEmptyFilterState();
+let filterTypeMode = 'all'; // 'all' | 'properties' | 'projects'
 const stalePendingHandled = new Set();
 
 // ─── Selection State ───
@@ -324,6 +325,14 @@ function renderChipBar(facets) {
     html += `<button class="sort-option ${opt.key === filterState.sortKey ? 'active' : ''}" data-sort-key="${opt.key}">${opt.label}</button>`;
   });
   html += `</div>`;
+
+  // Type filter chips (All / Properties / Projects)
+  const projectCount = (cachedProjects || []).length;
+  if (projectCount > 0) {
+    html += `<button class="chip ${filterTypeMode === 'all' ? 'chip-active' : ''}" data-chip-type="typeMode" data-chip-value="all">All</button>`;
+    html += `<button class="chip ${filterTypeMode === 'properties' ? 'chip-active' : ''}" data-chip-type="typeMode" data-chip-value="properties">Properties</button>`;
+    html += `<button class="chip ${filterTypeMode === 'projects' ? 'chip-active' : ''}" data-chip-type="typeMode" data-chip-value="projects">Projects (${projectCount})</button>`;
+  }
 
   // City chips
   facets.cities.forEach(c => {
@@ -1028,6 +1037,11 @@ function attachHomeInteractions(container, renderFn) {
 }
 
 function toggleChipFilter(type, value) {
+  // Type mode is exclusive (radio), not toggle
+  if (type === 'typeMode') {
+    filterTypeMode = value;
+    return;
+  }
   const map = {
     city: 'cities',
     buildingType: 'buildingTypes',
@@ -1169,13 +1183,32 @@ function buildProjectCardHtml(project, index) {
   `;
 }
 
-function buildProjectCardsSection(projects) {
-  if (!projects || projects.length === 0) return '';
-  return `
-    <div class="home-section-label">Projects</div>
-    ${projects.map((p, i) => buildProjectCardHtml(p, i)).join('')}
-    <div class="home-section-label" style="margin-top:var(--space-lg)">Properties</div>
-  `;
+// Merge projects into the unified feed as virtual items
+function buildUnifiedFeed(standaloneFiltered, projects, filterType) {
+  // Build unified list
+  let unified = [];
+  
+  if (filterType !== 'projects') {
+    unified.push(...standaloneFiltered.map(item => ({ ...item, _type: 'property' })));
+  }
+  
+  if (filterType !== 'properties' && projects && projects.length > 0) {
+    unified.push(...projects.map(p => ({ ...p, _type: 'project' })));
+  }
+  
+  // Sort by newest first (created_at)
+  unified.sort((a, b) => {
+    const ta = getTimestampMillis(a.created_at);
+    const tb = getTimestampMillis(b.created_at);
+    return tb - ta;
+  });
+  
+  return unified;
+}
+
+function buildUnifiedCardHtml(item, index) {
+  if (item._type === 'project') return buildProjectCardHtml(item, index);
+  return buildCardHtml(item, index);
 }
 
 export const invalidateHomeCache = () => {
@@ -1220,11 +1253,11 @@ export const renderHome = async (container, options = {}) => {
       const filtered = applyFilters(visibleItems, filterState);
       // Filter out items that belong to a project (they appear under their project card)
       const standaloneFiltered = filtered.filter(item => !item.projectId);
-      const hasFilters = hasActiveFilters(filterState) || filterState.searchText;
-      const cardsHtml = standaloneFiltered.map((item, i) => buildCardHtml(item, i)).join('');
+      const hasFilters = hasActiveFilters(filterState) || filterState.searchText || filterTypeMode !== 'all';
       
-      // Build project cards section
-      const projectCardsHtml = buildProjectCardsSection(cachedProjects || []);
+      // Build unified feed (projects + standalone properties merged by date)
+      const unified = buildUnifiedFeed(standaloneFiltered, cachedProjects || [], filterTypeMode);
+      const cardsHtml = unified.map((item, i) => buildUnifiedCardHtml(item, i)).join('');
 
       // Focus Protection: If search input is active, only update list and chips
       const searchInput = document.getElementById('home-search-input');
@@ -1234,10 +1267,10 @@ export const renderHome = async (container, options = {}) => {
         // Partial Update: Only update the bits that change
         const listContainer = document.getElementById('property-list');
         if (listContainer) {
-          listContainer.innerHTML = filtered.length > 0 ? cardsHtml : `
+          listContainer.innerHTML = unified.length > 0 ? cardsHtml : `
             <div class="empty-state animate-enter" style="--delay:100ms; padding: var(--space-xl) 0">
               <svg class="empty-state-icon" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-              <h2 class="text-heading" style="font-size:16px; margin-top:var(--space-md)">No properties match</h2>
+              <h2 class="text-heading" style="font-size:16px; margin-top:var(--space-md)">No results match</h2>
               <p class="text-label" style="margin-top:var(--space-xs)">Try adjusting your search or filters</p>
               ${hasFilters ? '<button class="btn-secondary btn-sm" id="clear-all-inline" style="margin-top:var(--space-md)">Clear All Filters</button>' : ''}
             </div>
@@ -1247,7 +1280,8 @@ export const renderHome = async (container, options = {}) => {
         // Update result count label
         const resultLabel = container.querySelector('.text-label');
         if (resultLabel) {
-          resultLabel.textContent = `${standaloneFiltered.length}${hasFilters ? ` of ${visibleItems.filter(i => !i.projectId).length}` : ''} propert${standaloneFiltered.length === 1 ? 'y' : 'ies'}${(cachedProjects || []).length > 0 ? ` · ${(cachedProjects || []).length} project${(cachedProjects || []).length === 1 ? '' : 's'}` : ''}`;
+          const totalShown = unified.length;
+          resultLabel.textContent = `${totalShown} result${totalShown !== 1 ? 's' : ''}${hasFilters ? ` (filtered)` : ''}`;
         }
 
         // Update clear button visibility
@@ -1288,7 +1322,7 @@ export const renderHome = async (container, options = {}) => {
               <div>
                 <h1 class="text-display">Your Properties</h1>
                 <div style="display:flex; align-items:center; gap:var(--space-sm)">
-                  <p class="text-label">${standaloneFiltered.length}${hasFilters ? ` of ${visibleItems.filter(i => !i.projectId).length}` : ''} propert${standaloneFiltered.length === 1 ? 'y' : 'ies'}${(cachedProjects || []).length > 0 ? ` · ${(cachedProjects || []).length} project${(cachedProjects || []).length === 1 ? '' : 's'}` : ''}</p>
+                  <p class="text-label">${unified.length} result${unified.length !== 1 ? 's' : ''}${hasFilters ? ' (filtered)' : ''}</p>
                   ${isOffline ? '<span class="badge" style="background:var(--destructive-dim); color:white; border:none; font-size:10px">Offline: Cached</span>' : ''}
                 </div>
               </div>
@@ -1307,11 +1341,10 @@ export const renderHome = async (container, options = {}) => {
             ${renderChipBar({ ...rawFacets, tradeAreas: topTradeAreas })}
           </div>
           <div class="page-content" id="property-list">
-            ${projectCardsHtml}
-            ${standaloneFiltered.length > 0 ? cardsHtml : `
+            ${unified.length > 0 ? cardsHtml : `
               <div class="empty-state animate-enter" style="--delay:100ms; padding: var(--space-xl) 0">
                 <svg class="empty-state-icon" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity:0.4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                <h2 class="text-heading" style="font-size:16px; margin-top:var(--space-md)">No properties match</h2>
+                <h2 class="text-heading" style="font-size:16px; margin-top:var(--space-md)">No results match</h2>
                 <p class="text-label" style="margin-top:var(--space-xs)">Try adjusting your search or filters</p>
                 ${hasFilters ? '<button class="btn-secondary btn-sm" id="clear-all-inline" style="margin-top:var(--space-md)">Clear All Filters</button>' : ''}
               </div>
