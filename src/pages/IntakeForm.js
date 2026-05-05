@@ -391,6 +391,7 @@ export const renderIntakeForm = async (container) => {
   if (projectSelector) {
     const options = allProjects.map(p => `${p.name}${p.city ? ` (${p.city})` : ''}`);
     initCreatableSelect(projectSelector, options, {
+      allowCreate: false,
       onChange: (val) => {
         if (!val) return;
         const p = allProjects.find(x => `${x.name}${x.city ? ` (${x.city})` : ''}` === val);

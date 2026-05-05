@@ -707,7 +707,8 @@ export const renderEditProperty = async (container, id, type = 'property') => {
         return Array.from(inputEl?.files || []);
       };
 
-      SECTIONS.forEach(section => {
+      const activeSections = currentType === 'project' ? PROJECT_SECTIONS : SECTIONS;
+      activeSections.forEach(section => {
         section.fields.forEach(field => {
           if (field.type === 'toggle') {
             const active = container.querySelector(`[data-toggle="${field.name}"] .active`);

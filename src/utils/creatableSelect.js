@@ -60,7 +60,7 @@ export function initCreatableSelect(input, options = [], config = {}) {
     });
 
     // "Create new" option
-    if (q && !exactMatch) {
+    if (config.allowCreate !== false && q && !exactMatch) {
       const cls = filtered.length === highlightIdx ? 'cs-opt cs-create cs-hl' : 'cs-opt cs-create';
       html += `<div class="${cls}" data-value="${q}">+ Add "<em>${q}</em>"</div>`;
     }

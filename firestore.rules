@@ -177,7 +177,7 @@ service cloud.firestore {
 
     function isValidInventory(data) {
       return data.keys().hasOnly(inventoryAllowedKeys()) &&
-        data.keys().hasAll(['name', 'status', 'createdBy', 'creatorEmail', 'creatorName', 'created_at', 'updated_at']) &&
+        data.keys().hasAll(['name', 'status', 'createdBy', 'created_at', 'updated_at']) &&
         data.name is string &&
         data.name.size() > 0 &&
         data.name.size() <= 200 &&
@@ -258,6 +258,8 @@ service cloud.firestore {
         'unitCount',
         'images',
         'status',
+        'mediaUploadPending',
+        'syncPending',
         'createdBy',
         'creatorEmail',
         'creatorName',
@@ -268,7 +270,7 @@ service cloud.firestore {
 
     function isValidProject(data) {
       return data.keys().hasOnly(projectsAllowedKeys()) &&
-        data.keys().hasAll(['name', 'createdBy', 'creatorEmail', 'creatorName', 'created_at', 'updated_at']) &&
+        data.keys().hasAll(['name', 'createdBy', 'created_at', 'updated_at']) &&
         data.name is string &&
         data.name.size() > 0 &&
         data.name.size() <= 200 &&

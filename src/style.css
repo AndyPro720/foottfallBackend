@@ -1606,7 +1606,14 @@ body {
   background: var(--bg-raised);
   color: var(--text-primary);
   text-align: center;
+  border-bottom: 3px solid transparent;
+  transition: border-color 0.2s;
 }
+
+.tile-pdf { border-bottom-color: #f40f02; }
+.tile-doc { border-bottom-color: #2b579a; }
+.tile-cad { border-bottom-color: #f99b1c; }
+.tile-video { border-bottom-color: var(--accent-green); }
 
 .media-file-tile-ext {
   font-size: 18px;

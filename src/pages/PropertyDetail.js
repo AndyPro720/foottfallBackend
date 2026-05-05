@@ -150,8 +150,9 @@ function getAllLocationDetails(item) {
 }
 
 function renderFileTile(url, caption = '') {
+  const kind = getFileKindLabel(url).toLowerCase();
   return `
-    <div class="media-file-tile">
+    <div class="media-file-tile tile-${kind}">
       <span class="media-file-tile-ext">${getFileExtensionLabel(url)}</span>
       <span class="media-file-tile-kind">${getFileKindLabel(url)}</span>
       ${caption ? `<span class="text-caption media-file-tile-caption">${caption}</span>` : ''}
@@ -612,12 +613,12 @@ export const renderPropertyDetail = async (container, id) => {
 
     window.openLightbox = (src) => {
       if (isPdfUrl(src) || isDocUrl(src) || isCadUrl(src)) {
-        // iOS can't download docs natively — open via Google Docs Viewer for PPT/DOC
+        // iOS can't download docs natively — open via Google Docs Viewer for Office files
         if (isDocUrl(src)) {
           window.open(`https://docs.google.com/gview?url=${encodeURIComponent(src)}&embedded=false`, '_blank', 'noopener');
-        } else if (isCadUrl(src)) {
-          window.open(src, '_blank', 'noopener');
         } else {
+          // PDFs and CAD files: open directly in new tab
+          // Note: CAD files (.dwg/.dxf) will likely trigger a download or "open in..." prompt on iOS
           window.open(src, '_blank', 'noopener');
         }
         return;
