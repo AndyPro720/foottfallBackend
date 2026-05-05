@@ -8,6 +8,7 @@ import {
   isVideoUrl,
   isVisualMediaUrl,
 } from '../utils/media.js';
+import { isBrokerItem, isMergeableItem } from '../utils/propertyFlags.js';
 import {
   applyFilters,
   createEmptyFilterState,
@@ -200,14 +201,8 @@ function buildCardHtml(item, i) {
     parentProject = cachedProjects.find(p => p.id === item.projectId);
   }
 
-  const isMergeable = item.mergable === true || 
-                     String(item.mergable || '').toLowerCase() === 'yes' ||
-                     (parentProject && (parentProject.mergable === true || String(parentProject.mergable || '').toLowerCase() === 'yes'));
-
-  const isBroker = String(item.contactDesignation || '').toLowerCase() === 'broker' ||
-                  (parentProject && String(parentProject.contactDesignation || '').toLowerCase() === 'broker');
-
-  const isAdminViewer = ['admin', 'superadmin'].includes(window.userProfile?.role);
+  const isMergeable = isMergeableItem(item, parentProject);
+  const isBroker = isBrokerItem(item, parentProject);
   const locationHtml = locationSummary
     ? `<p class="text-label ${primaryLocationLink ? 'card-location-link' : ''}" ${primaryLocationLink ? `data-map-link="${primaryLocationLink}"` : ''} style="margin-top:var(--space-xs)">${locationSummary}</p>`
     : '<p class="text-label" style="margin-top:var(--space-xs)">No location</p>';
@@ -1066,6 +1061,7 @@ function toggleChipFilter(type, value) {
     buildingType: 'buildingTypes',
     propertyStatus: 'propertyStatuses',
     tradeArea: 'tradeAreas',
+    mergable: 'mergable',
   };
   const key = map[type];
   if (!key) return;
@@ -1145,13 +1141,28 @@ function closeFilterPanel() {
 
 // ─── Project Card Builder ───
 
-function buildProjectCardHtml(project, index) {
+function buildProjectCardHtml(project, index, allUnits = []) {
   const location = [project.tradeArea, project.city].filter(Boolean).join(', ');
   const typeBadge = project.buildingType ? `<span style="font-size:10px;padding:2px 6px;border-radius:var(--radius-sm);background:var(--bg-overlay);color:var(--text-secondary)">${project.buildingType}</span>` : '';
   const unitCount = project.unitCount || 0;
   const isBroker = String(project.contactDesignation || '').toLowerCase() === 'broker';
+
+  // Thumbnail logic with unit fallback
+  const facadeImages = project.images?.buildingFacade || [];
+  let thumbUrl = null;
   
-  // Thumbnail from building facade
+  if (facadeImages.length > 0) {
+    const first = facadeImages[0];
+    thumbUrl = typeof first === 'string' ? first : first.url;
+  } else {
+    // Fallback: look for ANY unit image in this project
+    const unitWithImg = allUnits.find(u => u.projectId === project.id && (u.images?.unitFacade?.length > 0 || u.images?.interior?.length > 0));
+    if (unitWithImg) {
+      const imgObj = (unitWithImg.images.unitFacade || unitWithImg.images.interior)[0];
+      thumbUrl = typeof imgObj === 'string' ? imgObj : imgObj.url;
+    }
+  }
+
   let thumbHtml = `
     <div class="card-thumbnail-wrapper">
       <div class="card-thumbnail-file">
@@ -1162,28 +1173,11 @@ function buildProjectCardHtml(project, index) {
       ${isBroker ? '<div class="agent-source-marker" style="top:8px;right:8px" title="Broker" aria-label="Broker">B</div>' : ''}
     </div>
   `;
-  const facadeImages = project.images?.buildingFacade || [];
-  if (facadeImages.length > 0) {
-    const first = facadeImages[0];
-    const url = typeof first === 'string' ? first : first.url;
-    if (url) {
-      thumbHtml = `
-        <div class="card-thumbnail-wrapper">
-          <span class="project-badge">PROJECT</span>
-          <img class="card-thumbnail" src="${url}" alt="${project.name || ''}" loading="lazy">
-          ${isBroker ? '<div class="agent-source-marker" style="top:8px;right:8px" title="Broker" aria-label="Broker">B</div>' : ''}
-        </div>
-      `;
-    }
-  } else {
+
+  if (thumbUrl) {
     thumbHtml = `
       <div class="card-thumbnail-wrapper">
-        <span class="project-badge">PROJECT</span>
-        <div class="card-thumbnail-file">
-          <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1"/>
-          </svg>
-        </div>
+        <img class="card-thumbnail" src="${thumbUrl}" alt="${project.name || ''}" loading="lazy">
         ${isBroker ? '<div class="agent-source-marker" style="top:8px;right:8px" title="Broker" aria-label="Broker">B</div>' : ''}
       </div>
     `;
@@ -1195,9 +1189,11 @@ function buildProjectCardHtml(project, index) {
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:var(--text-sm);margin-bottom:2px">${project.name || 'Unnamed Project'}</div>
         <div style="font-size:12px;color:var(--text-secondary)">${location || 'No location set'}</div>
-        <div style="display:flex;align-items:center;gap:var(--space-sm);margin-top:4px">
-          <span class="project-unit-count">${unitCount} unit${unitCount !== 1 ? 's' : ''}</span>
-          ${typeBadge}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
+          <div style="display:flex;align-items:center;gap:var(--space-sm)">
+            <span class="project-unit-count" style="font-weight:500; font-size:12px">${unitCount} unit${unitCount !== 1 ? 's' : ''}</span>
+            ${typeBadge}
+          </div>
         </div>
       </div>
       <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0;color:var(--text-tertiary)">
@@ -1231,7 +1227,7 @@ function buildUnifiedFeed(standaloneFiltered, projects, filterType) {
 }
 
 function buildUnifiedCardHtml(item, index) {
-  if (item._type === 'project') return buildProjectCardHtml(item, index);
+  if (item._type === 'project') return buildProjectCardHtml(item, index, cachedItems || []);
   return buildCardHtml(item, index);
 }
 
@@ -1256,9 +1252,24 @@ export const renderHome = async (container, options = {}) => {
       if (!cachedItems) return;
       const currentUid = window.userProfile?.uid || '';
       const visibleItems = cachedItems.filter(item => {
+        const isAdmin = ['admin', 'superadmin'].includes(window.userProfile?.role);
+        if (isAdmin) return true;
+
+        const isCreator = Boolean(currentUid) && item.createdBy === currentUid;
+        if (isCreator) return true;
+
+        // Project ownership check: if unit is in a project I own, I can see it
+        const isProjectOwner = item.projectId && cachedProjects && 
+                               cachedProjects.some(p => p.id === item.projectId && p.createdBy === currentUid);
+        if (isProjectOwner) return true;
+
+        // Legacy support: items without creator are public
+        if (!item.createdBy) return true;
+
         const status = String(item.status || 'active').toLowerCase();
         if (status === 'active') return true;
-        return Boolean(currentUid) && item.createdBy === currentUid;
+
+        return false;
       });
       const isOffline = !navigator.onLine;
 
@@ -1275,13 +1286,39 @@ export const renderHome = async (container, options = {}) => {
         .map(entry => entry[0]);
 
       const filtered = applyFilters(visibleItems, filterState);
+      
+      // Map project IDs to actual unit counts from visible items
+      const projectUnitCounts = {};
+      visibleItems.forEach(item => {
+        if (item.projectId) {
+          projectUnitCounts[item.projectId] = (projectUnitCounts[item.projectId] || 0) + 1;
+        }
+      });
+
+      // Also filter projects based on search text if any
+      const hasSearch = Boolean(filterState.searchText?.trim());
+      let filteredProjects = cachedProjects || [];
+      if (hasSearch) {
+        const q = filterState.searchText.toLowerCase();
+        filteredProjects = filteredProjects.filter(p => 
+          (p.name && p.name.toLowerCase().includes(q)) ||
+          (p.city && p.city.toLowerCase().includes(q)) ||
+          (p.tradeArea && p.tradeArea.toLowerCase().includes(q))
+        );
+      }
+
+      // Inject accurate counts into filteredProjects
+      const projectsWithCounts = filteredProjects.map(p => ({
+        ...p,
+        unitCount: projectUnitCounts[p.id] || 0
+      }));
+
       // Filter out items that belong to a project (they appear under their project card)
-      const hasSearch = Boolean(filterState.search?.trim());
       const standaloneFiltered = filtered.filter(item => !item.projectId || hasSearch);
       const hasFilters = hasActiveFilters(filterState) || filterState.searchText || filterTypeMode !== 'all';
       
       // Build unified feed (projects + standalone properties merged by date)
-      const unified = buildUnifiedFeed(standaloneFiltered, cachedProjects || [], filterTypeMode);
+      const unified = buildUnifiedFeed(standaloneFiltered, projectsWithCounts, filterTypeMode);
       const cardsHtml = unified.map((item, i) => buildUnifiedCardHtml(item, i)).join('');
 
       // Focus Protection: If search input is active, only update list and chips
@@ -1419,12 +1456,48 @@ export const renderHome = async (container, options = {}) => {
   }
 
   try {
-    const [items, projects] = await Promise.all([
-      getInventoryItems({}, () => {
+    // 1. Fetch Projects first (so we know which ones the agent owns)
+    const projects = await getProjects().catch(() => []);
+    const projectIds = (projects || []).map(p => p.id);
+
+    // 2. Fetch Units
+    // For agents, we fetch both units they created AND units in projects they own.
+    let items = [];
+    const role = window.userProfile?.role || 'agent';
+    const isAdmin = ['admin', 'superadmin'].includes(role);
+
+    if (isAdmin) {
+      items = await getInventoryItems({}, () => {
         renderHome(container, { forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
-      }),
-      getProjects().catch(() => [])
-    ]);
+      });
+    } else {
+      // Agent path: Fetch units created by me AND units in my projects
+      const [myUnits, projectUnits] = await Promise.all([
+        getInventoryItems({}, null), // filters by createdBy inside service
+        projectIds.length > 0 
+          ? getInventoryItems({}, null, { projectIds }) 
+          : Promise.resolve([])
+      ]);
+      
+      // Merge and deduplicate
+      const seen = new Set();
+      items = [...myUnits];
+      myUnits.forEach(u => seen.add(u.id));
+      projectUnits.forEach(u => {
+        if (!seen.has(u.id)) {
+          items.push(u);
+          seen.add(u.id);
+        }
+      });
+
+      // Background sync setup for agents (simplified to myUnits for now)
+      getInventoryItems({}, (newItems) => {
+         // Logic to merge new data if needed... 
+         // For now, simple refresh
+         renderHome(container, { forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
+      });
+    }
+
     const allItems = Array.isArray(items) ? items : [];
     cachedItems = allItems;
     cachedProjects = Array.isArray(projects) ? projects : [];
@@ -1455,6 +1528,7 @@ export const renderHome = async (container, options = {}) => {
         const users = await getAllUsers();
         cachedUserNameMap = {};
         cachedUserRoleMap = {};
+        window.__cachedUserRoleMap = cachedUserRoleMap;
         users.forEach(u => {
           cachedUserNameMap[u.id] = u.displayName || u.email?.split('@')[0] || 'Unknown';
           cachedUserRoleMap[u.id] = u.role || '';
@@ -1468,7 +1542,8 @@ export const renderHome = async (container, options = {}) => {
     const visibleItems = allItems.filter(item => {
       const status = String(item.status || 'active').toLowerCase();
       if (status === 'active') return true;
-      return Boolean(currentUid) && item.createdBy === currentUid;
+      if (status === 'pending') return item.createdBy === currentUid;
+      return false;
     });
 
     if (visibleItems.length === 0) {

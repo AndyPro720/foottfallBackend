@@ -1,5 +1,5 @@
 import { getProjectById, getProjectUnits, deleteProject, updateProject } from '../backend/projectService.js';
-import { deleteInventoryItem } from '../backend/inventoryService.js';
+import { isBrokerItem, isMergeableItem } from '../utils/propertyFlags.js';
 
 /**
  * Renders the Project Detail view showing project info + unit list.
@@ -20,10 +20,19 @@ export async function renderProjectDetail(container, projectId) {
   `;
 
   try {
-    const [project, units] = await Promise.all([
-      getProjectById(projectId),
-      getProjectUnits(projectId)
-    ]);
+    let project, units;
+    try {
+      project = await getProjectById(projectId);
+      try {
+        units = await getProjectUnits(projectId);
+      } catch (e) {
+        console.warn("Failed to fetch project units (access restricted?):", e);
+        units = [];
+      }
+    } catch (err) {
+      console.error("Failed to load project header:", err);
+      throw err; // Re-throw to main catch block
+    }
 
     if (!project) {
       container.innerHTML = `
@@ -80,7 +89,7 @@ export async function renderProjectDetail(container, projectId) {
         </div>
       `;
     } else {
-      unitsHtml = units.map(unit => buildUnitCard(unit)).join('');
+      unitsHtml = units.map(unit => buildUnitCard(unit, project)).join('');
     }
 
     container.innerHTML = `
@@ -99,7 +108,14 @@ export async function renderProjectDetail(container, projectId) {
             Share
           </button>
         </div>
-        <h1 class="text-heading" style="margin-top:var(--space-sm)">${escHtml(project.name)}</h1>
+        <h1 class="text-heading" style="margin-top:var(--space-sm); display:flex; align-items:center; gap:var(--space-sm)">
+          ${escHtml(project.name)}
+        </h1>
+        <div style="font-size:12px; color:var(--text-tertiary); margin-bottom:var(--space-md)">
+          Created by ${escHtml(project.creatorName || 'Unknown')} 
+          ${project.createdBy ? `(${escHtml(window.__cachedUserRoleMap?.[project.createdBy] || 'agent')})` : ''} 
+          · ${project.created_at ? new Date(project.created_at.seconds * 1000).toLocaleDateString() : 'Unknown date'}
+        </div>
         ${facadeHtml}
         <div class="project-detail-info">
           ${infoRows.join('')}
@@ -171,13 +187,23 @@ export async function renderProjectDetail(container, projectId) {
         : 'Delete this project? This cannot be undone.';
       if (!confirm(confirmMsg)) return;
 
+      const { deleteInventoryItem, updateInventoryItem } = await import('../backend/inventoryService.js');
+      const deleteAllUnits = confirm('Do you also want to PERMANENTLY DELETE all units inside this project?\n\nOK = Delete all units\nCancel = Keep units (they will be unlinked)');
+
       try {
-        // Unlink units from project (remove projectId)
-        for (const unit of units) {
-          try {
-            const { updateInventoryItem } = await import('../backend/inventoryService.js');
-            await updateInventoryItem(unit.id, { projectId: null });
-          } catch (e) { console.warn('Failed to unlink unit', unit.id, e); }
+        if (deleteAllUnits) {
+          for (const unit of units) {
+            try {
+              await deleteInventoryItem(unit.id);
+            } catch (e) { console.warn('Failed to delete unit', unit.id, e); }
+          }
+        } else {
+          // Unlink units from project (remove projectId)
+          for (const unit of units) {
+            try {
+              await updateInventoryItem(unit.id, { projectId: null });
+            } catch (e) { console.warn('Failed to unlink unit', unit.id, e); }
+          }
         }
         await deleteProject(projectId);
         if (typeof window.__invalidateHomeCache === 'function') window.__invalidateHomeCache();
@@ -212,21 +238,38 @@ function buildInfoRow(label, value) {
   `;
 }
 
-function buildUnitCard(unit) {
+function buildUnitCard(unit, parentProject = null) {
   const unitName = unit.unitName || unit.name || 'Unnamed Unit';
   const floor = unit.floor ? `Floor: ${unit.floor}` : '';
   const size = unit.size ? `${unit.size} sqft` : '';
   const price = unit.price ? `₹${unit.price}/sqft` : '';
   const status = unit.propertyStatus || '';
 
+  const isMergeable = isMergeableItem(unit, parentProject);
+  const isBroker = isBrokerItem(unit, parentProject);
+  const mergeableBadgeHtml = isMergeable ? `
+    <div class="mergeable-badge" style="bottom:2px;right:2px;padding:2px" title="Mergeable Unit" aria-label="Mergeable Unit">
+      <svg class="mergeable-icon" style="width:12px" viewBox="0 0 120 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="10" width="38" height="30" rx="4" stroke="currentColor" stroke-width="4"/>
+        <path d="M40 25H50" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+        <path d="M45 20V30" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+        <rect x="50" y="10" width="38" height="30" rx="4" stroke="currentColor" stroke-width="4"/>
+        <path d="M92 25H114" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+        <path d="M106 17L114 25L106 33" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  ` : '';
+
   // Thumbnail
   let thumbHtml = `
-    <div class="card-thumbnail-wrapper">
+    <div class="card-thumbnail-wrapper" style="position:relative">
       <div class="card-thumbnail-file">
         <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1"/>
         </svg>
       </div>
+      ${isBroker ? '<div class="agent-source-marker" style="top:5px;right:5px;width:18px;height:18px;font-size:9px" title="Broker" aria-label="Broker">B</div>' : ''}
+      ${mergeableBadgeHtml}
     </div>
   `;
   const unitImages = unit.images?.unitFacade || unit.images?.interior || [];
@@ -235,8 +278,10 @@ function buildUnitCard(unit) {
     const imgUrl = typeof firstImg === 'string' ? firstImg : firstImg.url;
     if (imgUrl) {
       thumbHtml = `
-        <div class="card-thumbnail-wrapper">
+        <div class="card-thumbnail-wrapper" style="position:relative">
           <img class="card-thumbnail" src="${imgUrl}" alt="${escHtml(unitName)}" loading="lazy">
+          ${isBroker ? '<div class="agent-source-marker" style="top:5px;right:5px;width:18px;height:18px;font-size:9px" title="Broker" aria-label="Broker">B</div>' : ''}
+          ${mergeableBadgeHtml}
         </div>
       `;
     }

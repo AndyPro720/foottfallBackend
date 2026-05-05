@@ -245,18 +245,29 @@ export async function getInventoryItemById(id, onNewData = null) {
  * @param {Function} onNewData Optional callback fired if background sync finds updated data.
  * @returns {Promise<Array>} Array of inventory documents.
  */
-export async function getInventoryItems(filters = {}, onNewData = null) {
+export async function getInventoryItems(filters = {}, onNewData = null, options = {}) {
   try {
     let q = query(collection(db, INVENTORY_COLLECTION));
+    const { projectIds = [] } = options;
 
-    // Role-based filtering: Only admins see everything. Regular users (agents) see only their own.
+    // Role-based filtering: Only admins see everything. 
+    // Regular users (agents) see:
+    // 1. Items they created
+    // 2. Items in projects they own (provided via options.projectIds)
     const role = (typeof window !== "undefined" && window.userProfile?.role)
       ? window.userProfile.role
       : await getCurrentUserRole();
+    
     if (role !== 'admin' && role !== 'superadmin') {
       const uid = auth.currentUser?.uid;
       if (uid) {
-        q = query(q, where("createdBy", "==", uid));
+        if (projectIds.length > 0) {
+          // Firestore 'in' query limit is 30.
+          const limitedIds = projectIds.slice(0, 30);
+          q = query(q, where("projectId", "in", limitedIds));
+        } else {
+          q = query(q, where("createdBy", "==", uid));
+        }
       }
     }
 

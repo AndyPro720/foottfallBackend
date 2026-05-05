@@ -497,7 +497,7 @@ export const renderPropertyDetail = async (container, id) => {
         </div>
 
         <div style="margin-top: var(--space-md)">
-          <a href="#" class="btn-secondary" style="width:auto; padding: 8px 16px; min-height: 0;">
+          <a href="${item.projectId ? '#project/' + item.projectId : '#'}" class="btn-secondary" style="width:auto; padding: 8px 16px; min-height: 0;">
             <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
             Back
           </a>

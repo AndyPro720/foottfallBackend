@@ -111,6 +111,11 @@ service cloud.firestore {
     // even when all 50+ optional fields are populated.
     // ===============================================================
 
+    function isProjectCreator(projectId) {
+      let path = /databases/$(database)/documents/projects/$(projectId);
+      return exists(path) && get(path).data.createdBy == request.auth.uid;
+    }
+
     function inventoryAllowedKeys() {
       return [
         'name',
@@ -275,8 +280,8 @@ service cloud.firestore {
         data.name.size() > 0 &&
         data.name.size() <= 200 &&
         data.createdBy is string &&
-        data.creatorEmail is string &&
-        data.creatorName is string;
+        (!('creatorEmail' in data) || data.creatorEmail is string) &&
+        (!('creatorName' in data) || data.creatorName is string);
     }
 
     function projectImmutableFieldsUnchanged() {
@@ -291,8 +296,11 @@ service cloud.firestore {
     // ===============================================================
 
     match /projects/{projectId} {
-      allow read: if isAuthenticated() &&
-        (isAdmin() || resource.data.createdBy == request.auth.uid);
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        resource.data.createdBy == request.auth.uid ||
+        !('createdBy' in resource.data)
+      );
 
       allow create: if isActive() &&
         isValidProject(request.resource.data) &&
@@ -373,8 +381,12 @@ service cloud.firestore {
     }
 
     match /inventory/{itemId} {
-      allow read: if isAuthenticated() &&
-        (isAdmin() || resource.data.createdBy == request.auth.uid);
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        resource.data.createdBy == request.auth.uid ||
+        !('createdBy' in resource.data) ||
+        ('projectId' in resource.data && resource.data.projectId != null && isProjectCreator(resource.data.projectId))
+      );
 
       allow create: if isActive() &&
         isValidInventory(request.resource.data) &&
