@@ -27,6 +27,23 @@ let cachedUserRoleMap = {};
 let filterState = createEmptyFilterState();
 let filterTypeMode = 'all'; // 'all' | 'properties' | 'projects'
 const stalePendingHandled = new Set();
+const PROJECT_INHERITED_HOME_FIELDS = [
+  'vicinityBrands',
+  'buildingType',
+  'googleMapsLink',
+  'location',
+  'city',
+  'tradeArea',
+  'contactName',
+  'contactDesignation',
+  'contactInfo',
+  'buildingAge',
+  'miscNotes',
+  'presentationAvailable',
+  'presentationLink',
+  'latitude',
+  'longitude',
+];
 
 // ─── Selection State ───
 let isSelectionMode = false;
@@ -38,6 +55,117 @@ function getTimestampMillis(ts) {
   if (typeof ts.seconds === 'number') return ts.seconds * 1000;
   const num = Number(ts);
   return Number.isFinite(num) ? num : 0;
+}
+
+function isAdminRole(role = window.userProfile?.role) {
+  return ['admin', 'superadmin'].includes(role);
+}
+
+function hasValue(value) {
+  return value !== undefined && value !== null && value !== '';
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getVisibleProjects(projects = cachedProjects || []) {
+  if (!Array.isArray(projects)) return [];
+  if (isAdminRole()) return projects;
+  const currentUid = window.userProfile?.uid || '';
+  return projects.filter(project => !project?.createdBy || project.createdBy === currentUid);
+}
+
+function canViewInventoryItem(item, projects = cachedProjects || [], currentUid = window.userProfile?.uid || '', role = window.userProfile?.role) {
+  if (isAdminRole(role)) return true;
+
+  if (Boolean(currentUid) && item.createdBy === currentUid) return true;
+
+  const isProjectOwner = item.projectId && Array.isArray(projects)
+    && projects.some(project => project.id === item.projectId && project.createdBy === currentUid);
+  if (isProjectOwner) return true;
+
+  if (!item.createdBy) return true;
+
+  return String(item.status || 'active').toLowerCase() === 'active';
+}
+
+function hydrateProjectLinkedItem(item, projectMap) {
+  const project = item.projectId ? projectMap.get(item.projectId) : null;
+  if (!project) return item;
+
+  const hydrated = {
+    ...item,
+    images: {
+      ...(project.images || {}),
+      ...(item.images || {}),
+    },
+    __projectName: project.name || '',
+  };
+
+  PROJECT_INHERITED_HOME_FIELDS.forEach((fieldName) => {
+    if (!hasValue(hydrated[fieldName]) && hasValue(project[fieldName])) {
+      hydrated[fieldName] = project[fieldName];
+    }
+  });
+
+  return hydrated;
+}
+
+function projectHasMedia(project) {
+  return ['entryToBuilding', 'buildingFacade', 'presentationFile']
+    .some(category => Array.isArray(project?.images?.[category]) && project.images[category].length > 0);
+}
+
+function projectMatchesSearch(project, query) {
+  const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) return true;
+
+  return [
+    project.name,
+    project.city,
+    project.tradeArea,
+    project.location,
+    project.vicinityBrands,
+    project.contactName,
+    project.projectNotes || project.miscNotes,
+  ].some(value => normalizeText(value).includes(normalizedQuery));
+}
+
+function projectMatchesFilters(project, state) {
+  if (state.buildingTypes.length > 0) {
+    const itemType = normalizeText(project.buildingType);
+    if (!state.buildingTypes.some(value => normalizeText(value) === itemType)) return false;
+  }
+
+  if (state.cities.length > 0) {
+    const itemCity = normalizeText(project.city);
+    if (!state.cities.some(value => normalizeText(value) === itemCity)) return false;
+  }
+
+  if (state.tradeAreas.length > 0) {
+    const itemTradeArea = normalizeText(project.tradeArea);
+    if (!state.tradeAreas.some(value => normalizeText(value) === itemTradeArea)) return false;
+  }
+
+  if (state.createdByUids.length > 0 && !state.createdByUids.includes(project.createdBy)) {
+    return false;
+  }
+
+  return true;
+}
+
+function hasUnitScopedFilters(state) {
+  return (
+    state.propertyStatuses.length > 0 ||
+    state.priceMin !== null ||
+    state.priceMax !== null ||
+    state.sizeMin !== null ||
+    state.sizeMax !== null ||
+    state.floor !== '' ||
+    state.mezzanine !== 'any' ||
+    state.suitableFor !== ''
+  );
 }
 
 function toFiniteNumber(value) {
@@ -200,6 +328,7 @@ function buildCardHtml(item, i) {
   if (item.projectId && Array.isArray(cachedProjects)) {
     parentProject = cachedProjects.find(p => p.id === item.projectId);
   }
+  const parentProjectName = parentProject?.name || item.__projectName || '';
 
   const isMergeable = isMergeableItem(item, parentProject);
   const isBroker = isBrokerItem(item, parentProject);
@@ -231,7 +360,7 @@ function buildCardHtml(item, i) {
         </div>
         <div style="flex:1">
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 8px;">
-            <h3 class="text-subheading">${item.name || 'Unnamed Property'}${parentProject ? ` <span style="font-weight:400; font-size: 0.85em; opacity: 0.7;">(${parentProject.name})</span>` : ''}</h3>
+            <h3 class="text-subheading">${item.name || 'Unnamed Property'}${parentProjectName ? ` <span style="font-weight:400; font-size: 0.85em; opacity: 0.7;">(${parentProjectName})</span>` : ''}</h3>
             <div style="display:flex; flex-direction:column; align-items:flex-end; gap: var(--space-xs);">
               ${totalRent ? `<span class="badge badge-rent">${formatINR(totalRent)}</span>` : ''}
               ${!totalRent && hasPerSqft ? `<span class="badge">${formatINR(perSqft)}/sqft</span>` : ''}
@@ -1115,11 +1244,11 @@ function updateFilterResultCount() {
   const el = document.getElementById('filter-result-count');
   if (!el || !cachedItems) return;
   const currentUid = window.userProfile?.uid || '';
-  const visibleItems = cachedItems.filter(item => {
-    const status = String(item.status || 'active').toLowerCase();
-    if (status === 'active') return true;
-    return Boolean(currentUid) && item.createdBy === currentUid;
-  });
+  const visibleProjects = getVisibleProjects(cachedProjects || []);
+  const projectMap = new Map(visibleProjects.map(project => [project.id, project]));
+  const visibleItems = cachedItems
+    .filter(item => canViewInventoryItem(item, visibleProjects, currentUid))
+    .map(item => hydrateProjectLinkedItem(item, projectMap));
   const filtered = applyFilters(visibleItems, filterState);
   el.textContent = `${filtered.length} result${filtered.length === 1 ? '' : 's'}`;
 }
@@ -1226,8 +1355,8 @@ function buildUnifiedFeed(standaloneFiltered, projects, filterType) {
   return unified;
 }
 
-function buildUnifiedCardHtml(item, index) {
-  if (item._type === 'project') return buildProjectCardHtml(item, index, cachedItems || []);
+function buildUnifiedCardHtml(item, index, allUnits = cachedItems || []) {
+  if (item._type === 'project') return buildProjectCardHtml(item, index, allUnits);
   return buildCardHtml(item, index);
 }
 
@@ -1251,32 +1380,16 @@ export const renderHome = async (container, options = {}) => {
     const reRenderFromCache = () => {
       if (!cachedItems) return;
       const currentUid = window.userProfile?.uid || '';
-      const visibleItems = cachedItems.filter(item => {
-        const isAdmin = ['admin', 'superadmin'].includes(window.userProfile?.role);
-        if (isAdmin) return true;
-
-        const isCreator = Boolean(currentUid) && item.createdBy === currentUid;
-        if (isCreator) return true;
-
-        // Project ownership check: if unit is in a project I own, I can see it
-        const isProjectOwner = item.projectId && cachedProjects && 
-                               cachedProjects.some(p => p.id === item.projectId && p.createdBy === currentUid);
-        if (isProjectOwner) return true;
-
-        // Legacy support: items without creator are public
-        if (!item.createdBy) return true;
-
-        const status = String(item.status || 'active').toLowerCase();
-        if (status === 'active') return true;
-
-        return false;
-      });
+      const visibleProjects = getVisibleProjects(cachedProjects || []);
+      const projectMap = new Map(visibleProjects.map(project => [project.id, project]));
+      const visibleItems = cachedItems.filter(item => canViewInventoryItem(item, visibleProjects, currentUid));
+      const hydratedVisibleItems = visibleItems.map(item => hydrateProjectLinkedItem(item, projectMap));
       const isOffline = !navigator.onLine;
 
       // Dynamic facets - updated to sort by count for "Top" pills
-      const rawFacets = extractFacets(visibleItems);
+      const rawFacets = extractFacets(hydratedVisibleItems);
       const tradeAreaCounts = {};
-      visibleItems.forEach(item => {
+      hydratedVisibleItems.forEach(item => {
         const ta = String(item.tradeArea || '').trim();
         if (ta) tradeAreaCounts[ta] = (tradeAreaCounts[ta] || 0) + 1;
       });
@@ -1285,41 +1398,63 @@ export const renderHome = async (container, options = {}) => {
         .slice(0, 6)
         .map(entry => entry[0]);
 
-      const filtered = applyFilters(visibleItems, filterState);
-      
-      // Map project IDs to actual unit counts from visible items
-      const projectUnitCounts = {};
-      visibleItems.forEach(item => {
+      const filtered = applyFilters(hydratedVisibleItems, filterState);
+
+      const totalProjectUnitCounts = {};
+      hydratedVisibleItems.forEach(item => {
         if (item.projectId) {
-          projectUnitCounts[item.projectId] = (projectUnitCounts[item.projectId] || 0) + 1;
+          totalProjectUnitCounts[item.projectId] = (totalProjectUnitCounts[item.projectId] || 0) + 1;
         }
       });
 
-      // Also filter projects based on search text if any
-      const hasSearch = Boolean(filterState.searchText?.trim());
-      let filteredProjects = cachedProjects || [];
-      if (hasSearch) {
-        const q = filterState.searchText.toLowerCase();
-        filteredProjects = filteredProjects.filter(p => 
-          (p.name && p.name.toLowerCase().includes(q)) ||
-          (p.city && p.city.toLowerCase().includes(q)) ||
-          (p.tradeArea && p.tradeArea.toLowerCase().includes(q))
-        );
-      }
+      const filteredProjectUnitCounts = {};
+      filtered.forEach(item => {
+        if (item.projectId) {
+          filteredProjectUnitCounts[item.projectId] = (filteredProjectUnitCounts[item.projectId] || 0) + 1;
+        }
+      });
 
-      // Inject accurate counts into filteredProjects
-      const projectsWithCounts = filteredProjects.map(p => ({
-        ...p,
-        unitCount: projectUnitCounts[p.id] || 0
+      const hasSearch = Boolean(filterState.searchText?.trim());
+      const hasUnitFilters = hasUnitScopedFilters(filterState);
+      const filteredProjects = visibleProjects.filter(project => {
+        const projectLevelMatch = projectMatchesFilters(project, filterState);
+        const matchingUnitCount = filteredProjectUnitCounts[project.id] || 0;
+        const searchMatch = projectMatchesSearch(project, filterState.searchText);
+
+        if (!projectLevelMatch) return false;
+
+        if (hasUnitFilters) {
+          return matchingUnitCount > 0;
+        }
+
+        if (filterState.hasPhotos === 'yes') {
+          return projectHasMedia(project) || matchingUnitCount > 0;
+        }
+
+        if (filterState.hasPhotos === 'no') {
+          return matchingUnitCount > 0 || !projectHasMedia(project);
+        }
+
+        if (hasSearch) {
+          return searchMatch || matchingUnitCount > 0;
+        }
+
+        return true;
+      });
+
+      const hasFilters = hasActiveFilters(filterState) || hasSearch || filterTypeMode !== 'all';
+      const projectCountSource = hasFilters ? filteredProjectUnitCounts : totalProjectUnitCounts;
+      const projectsWithCounts = filteredProjects.map(project => ({
+        ...project,
+        unitCount: projectCountSource[project.id] || 0,
       }));
 
       // Filter out items that belong to a project (they appear under their project card)
       const standaloneFiltered = filtered.filter(item => !item.projectId || hasSearch);
-      const hasFilters = hasActiveFilters(filterState) || filterState.searchText || filterTypeMode !== 'all';
       
       // Build unified feed (projects + standalone properties merged by date)
       const unified = buildUnifiedFeed(standaloneFiltered, projectsWithCounts, filterTypeMode);
-      const cardsHtml = unified.map((item, i) => buildUnifiedCardHtml(item, i)).join('');
+      const cardsHtml = unified.map((item, i) => buildUnifiedCardHtml(item, i, hydratedVisibleItems)).join('');
 
       // Focus Protection: If search input is active, only update list and chips
       const searchInput = document.getElementById('home-search-input');
@@ -1456,26 +1591,28 @@ export const renderHome = async (container, options = {}) => {
   }
 
   try {
+    const refreshFromServer = () => {
+      renderHome(container, { forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
+    };
+
     // 1. Fetch Projects first (so we know which ones the agent owns)
-    const projects = await getProjects().catch(() => []);
+    const projects = await getProjects(forceRefresh ? null : refreshFromServer, { preferFresh: forceRefresh }).catch(() => []);
     const projectIds = (projects || []).map(p => p.id);
 
     // 2. Fetch Units
     // For agents, we fetch both units they created AND units in projects they own.
     let items = [];
     const role = window.userProfile?.role || 'agent';
-    const isAdmin = ['admin', 'superadmin'].includes(role);
+    const isAdmin = isAdminRole(role);
 
     if (isAdmin) {
-      items = await getInventoryItems({}, () => {
-        renderHome(container, { forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
-      });
+      items = await getInventoryItems({}, forceRefresh ? null : refreshFromServer, { preferFresh: forceRefresh });
     } else {
       // Agent path: Fetch units created by me AND units in my projects
       const [myUnits, projectUnits] = await Promise.all([
-        getInventoryItems({}, null), // filters by createdBy inside service
+        getInventoryItems({}, null, { preferFresh: forceRefresh }),
         projectIds.length > 0 
-          ? getInventoryItems({}, null, { projectIds }) 
+          ? getInventoryItems({}, null, { projectIds, preferFresh: forceRefresh }) 
           : Promise.resolve([])
       ]);
       
@@ -1490,12 +1627,12 @@ export const renderHome = async (container, options = {}) => {
         }
       });
 
-      // Background sync setup for agents (simplified to myUnits for now)
-      getInventoryItems({}, (newItems) => {
-         // Logic to merge new data if needed... 
-         // For now, simple refresh
-         renderHome(container, { forceRefresh: true, preserveScroll: true, silent: true }).catch(() => {});
-      });
+      if (!forceRefresh) {
+        getInventoryItems({}, refreshFromServer);
+        if (projectIds.length > 0) {
+          getInventoryItems({}, refreshFromServer, { projectIds });
+        }
+      }
     }
 
     const allItems = Array.isArray(items) ? items : [];
@@ -1539,14 +1676,11 @@ export const renderHome = async (container, options = {}) => {
     }
 
     const currentUid = window.userProfile?.uid || '';
-    const visibleItems = allItems.filter(item => {
-      const status = String(item.status || 'active').toLowerCase();
-      if (status === 'active') return true;
-      if (status === 'pending') return item.createdBy === currentUid;
-      return false;
-    });
+    const visibleItems = allItems.filter(item => canViewInventoryItem(item, cachedProjects || [], currentUid, role));
 
-    if (visibleItems.length === 0) {
+    const visibleProjects = getVisibleProjects(cachedProjects || []);
+
+    if (visibleItems.length === 0 && visibleProjects.length === 0) {
       const isOffline = !navigator.onLine;
       container.innerHTML = `
         <div class="page-header animate-enter">

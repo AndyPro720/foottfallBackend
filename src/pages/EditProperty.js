@@ -2,7 +2,7 @@ import { getInventoryItemById, updateInventoryItem, getInventoryItems } from '..
 import { getProjectById, updateProject } from '../backend/projectService.js';
 import { uploadMultipleFiles } from '../backend/storageService.js';
 import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
-import { SECTIONS, PROJECT_SECTIONS, PROJECT_FIELD_NAMES } from '../config/propertyFields.js';
+import { SECTIONS, PROJECT_SECTIONS, PROJECT_FIELD_NAMES, UNIT_ONLY_SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
 import { showToast } from '../utils/ui.js';
 import { extractFacets } from '../utils/filterEngine.js';
@@ -130,15 +130,23 @@ function renderExistingFilePreviewContent(url) {
 
 // Render helpers (reused from IntakeForm)
 
-function renderField(field, value) {
-  let html = '';
-  if (field.type === 'select') html = renderSelect(field, value);
-  else if (field.type === 'creatable-select') html = renderCreatableSelect(field, value);
-  else if (field.type === 'toggle') html = renderToggle(field, value);
-  else if (field.type === 'file') html = renderFileUpload(field, value);
-  else html = renderTextField(field, value);
+function escapeAttribute(value = '') {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
-  if (field.name === 'location') {
+function renderField(field, value, options = {}) {
+  let html = '';
+  if (field.type === 'select') html = renderSelect(field, value, options);
+  else if (field.type === 'creatable-select') html = renderCreatableSelect(field, value, options);
+  else if (field.type === 'toggle') html = renderToggle(field, value, options);
+  else if (field.type === 'file') html = renderFileUpload(field, value, options);
+  else html = renderTextField(field, value, options);
+
+  if (field.name === 'location' && !options.locked) {
     html += `
       <div id="map-picker-container" class="form-group animate-enter" style="--delay:200ms">
         <label class="form-label">Property Pin Location (Voluntary)</label>
@@ -167,27 +175,33 @@ function renderField(field, value) {
 
 
 
-function renderTextField(field, value = '') {
+function renderTextField(field, value = '', options = {}) {
+  const { locked = false } = options;
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
     : '';
+  const groupClass = locked ? 'form-group field-locked' : 'form-group';
+  const readonlyAttr = locked ? 'readonly aria-readonly="true"' : '';
   return `
-    <div class="form-group"${conditionalAttr}>
+    <div class="${groupClass}"${conditionalAttr}>
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
       <input class="form-input" type="${field.type}" id="${field.name}" name="${field.name}"
-             placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''} value="${value}" />
+             placeholder="${field.placeholder || ''}" ${field.required ? 'required' : ''} ${readonlyAttr} value="${escapeAttribute(value)}" />
     </div>
   `;
 }
 
-function renderSelect(field, value = '') {
+function renderSelect(field, value = '', options = {}) {
+  const { locked = false } = options;
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
     : '';
+  const groupClass = locked ? 'form-group field-locked' : 'form-group';
+  const disabledAttr = locked ? 'disabled aria-disabled="true"' : '';
   return `
-    <div class="form-group"${conditionalAttr}>
+    <div class="${groupClass}"${conditionalAttr}>
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
-      <select class="form-input form-select" id="${field.name}" name="${field.name}" ${field.required ? 'required' : ''}>
+      <select class="form-input form-select" id="${field.name}" name="${field.name}" ${field.required ? 'required' : ''} ${disabledAttr}>
         <option value="" disabled ${!value ? 'selected' : ''}>Select...</option>
         ${field.options.map(o => `<option value="${o}" ${o === value ? 'selected' : ''}>${o}</option>`).join('')}
       </select>
@@ -195,26 +209,31 @@ function renderSelect(field, value = '') {
   `;
 }
 
-function renderCreatableSelect(field, value = '') {
+function renderCreatableSelect(field, value = '', options = {}) {
+  const { locked = false } = options;
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
     : '';
+  const groupClass = locked ? 'form-group field-locked' : 'form-group';
+  const readonlyAttr = locked ? 'readonly aria-readonly="true"' : '';
   return `
-    <div class="form-group"${conditionalAttr}>
+    <div class="${groupClass}"${conditionalAttr}>
       <label class="form-label" for="${field.name}">${field.label}${field.required ? ' *' : ''}</label>
       <input class="form-input" type="text" id="${field.name}" name="${field.name}"
-             value="${value || ''}"
-             placeholder="${field.placeholder || 'Type or select...'}" ${field.required ? 'required' : ''} autocomplete="off" />
+             value="${escapeAttribute(value || '')}"
+             placeholder="${field.placeholder || 'Type or select...'}" ${field.required ? 'required' : ''} ${readonlyAttr} autocomplete="off" />
     </div>
   `;
 }
 
-function renderToggle(field, value = false) {
+function renderToggle(field, value = false, options = {}) {
+  const { locked = false, sourceItem = null } = options;
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
     : '';
+  const groupClass = locked ? 'form-group field-locked' : 'form-group';
   return `
-    <div class="form-group"${conditionalAttr}>
+    <div class="${groupClass}"${conditionalAttr}>
       <label class="form-label">${field.label}</label>
       <div class="toggle-group" data-toggle="${field.name}">
         <button type="button" class="toggle-option ${value ? 'active' : ''}" data-value="yes">Yes</button>
@@ -222,15 +241,15 @@ function renderToggle(field, value = false) {
       </div>
       ${field.hasCount ? `
         <div class="conditional-field" data-condition="${field.name}" style="display:${value ? 'block' : 'none'};margin-top:var(--space-sm)">
-          <input class="form-input" type="number" id="${field.name}Count" placeholder="${field.countLabel}" value="${value ? (item && item[`${field.name}Count`] || '') : ''}" />
+          <input class="form-input" type="number" id="${field.name}Count" placeholder="${field.countLabel}" ${locked ? 'readonly aria-readonly="true"' : ''} value="${value ? escapeAttribute(sourceItem?.[`${field.name}Count`] || '') : ''}" />
         </div>
       ` : ''}
       ${field.hasPhoto ? `
         <div class="conditional-field" data-condition="${field.name}" style="display:${value ? 'block' : 'none'};margin-top:var(--space-sm)">
           <div class="file-preview-grid" data-previews="${field.name}Photo">
-            ${item && item[`${field.name}Photo`] ? `
+            ${sourceItem && sourceItem[`${field.name}Photo`] ? `
               <div class="file-preview-item">
-                <img src="${item[`${field.name}Photo`]}" class="file-preview-thumb" />
+                <img src="${sourceItem[`${field.name}Photo`]}" class="file-preview-thumb" />
                 <button type="button" class="file-remove-btn" data-field="${field.name}Photo">&times;</button>
               </div>
             ` : ''}
@@ -248,13 +267,17 @@ function renderToggle(field, value = false) {
   `;
 }
 
-function renderFileUpload(field, existingUrls = []) {
+function renderFileUpload(field, existingUrls = [], options = {}) {
+  const { locked = false } = options;
   const conditionalAttr = field.conditionalOn
     ? ` data-conditional-on="${field.conditionalOn.field}" data-conditional-value="${field.conditionalOn.value}" style="display:none;"`
     : '';
   const hasVideoCapture = acceptsVideo(field.accept);
+  const groupClass = locked ? 'form-group field-locked' : 'form-group';
+  const disabledAttr = locked ? 'disabled aria-disabled="true"' : '';
+  const prompt = locked ? 'Inherited from project' : getUploadPrompt(field, true);
   return `
-    <div class="form-group"${conditionalAttr}>
+    <div class="${groupClass}"${conditionalAttr}>
       <label class="form-label">${field.label}</label>
       <div class="file-preview-grid" data-previews="${field.name}">
         ${(existingUrls || []).map(url => `
@@ -266,9 +289,9 @@ function renderFileUpload(field, existingUrls = []) {
       </div>
       <div class="file-upload-zone" data-upload="${field.name}" style="margin-top: var(--space-sm)">
         <svg class="file-upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 16V4m0 0l-4 4m4-4l4 4"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16.5v1.5A2 2 0 006 20h12a2 2 0 002-2v-1.5"></path></svg>
-        <p class="text-caption">${getUploadPrompt(field, true)}</p>
-        <input type="file" data-main-upload="true" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} />
-        ${hasVideoCapture ? '<input type="file" data-video-capture="true" accept="video/*" capture="environment" />' : ''}
+        <p class="text-caption">${prompt}</p>
+        <input type="file" data-main-upload="true" accept="${field.accept}" ${field.multiple ? 'multiple' : ''} ${disabledAttr} />
+        ${hasVideoCapture ? `<input type="file" data-video-capture="true" accept="video/*" capture="environment" ${disabledAttr} />` : ''}
         ${hasVideoCapture ? '<button type="button" class="capture-video-btn">Record Video</button>' : ''}
       </div>
     </div>
@@ -283,7 +306,7 @@ export const renderEditProperty = async (container, id, type = 'property') => {
   container.innerHTML = `<div class="page-header"><h1 class="text-display">Editing...</h1></div>`;
 
   if (type === 'project') {
-    item = await getProjectById(id);
+    item = await getProjectById(id, { preferFresh: true });
   } else {
     item = await getInventoryItemById(id);
   }
@@ -294,18 +317,20 @@ export const renderEditProperty = async (container, id, type = 'property') => {
   }
 
   const currentUid = window.userProfile?.uid || '';
-  const normalizedStatus = String(item.status || 'active').toLowerCase();
-  if (normalizedStatus !== 'active' && item.createdBy !== currentUid) {
-    container.innerHTML = `
-      <div class="card card-error">
-        Only the property creator can edit pending/inactive listings.
-      </div>
-    `;
-    return;
-  }
+  const userRole = window.userProfile?.role || '';
+  const isAdminUser = ['admin', 'superadmin'].includes(userRole);
 
   let facets = {};
   let cityTradeAreaMap = {};
+  let linkedProject = null;
+  const isProjectLinkedUnit = Boolean(item.projectId && type !== 'project');
+  if (isProjectLinkedUnit) {
+    try {
+      linkedProject = await getProjectById(item.projectId, { preferFresh: true });
+    } catch (err) {
+      console.warn("Could not load linked project for unit edit", err);
+    }
+  }
   try {
     const items = await getInventoryItems({});
     facets = extractFacets(items);
@@ -314,17 +339,43 @@ export const renderEditProperty = async (container, id, type = 'property') => {
     console.warn("Could not fetch inventory for autocomplete", err);
   }
 
-  const currentSections = type === 'project' ? PROJECT_SECTIONS : SECTIONS;
+  const isProjectOwner = Boolean(isProjectLinkedUnit && linkedProject?.createdBy === currentUid);
+  const canEditCurrentRecord = type === 'project'
+    ? (isAdminUser || item.createdBy === currentUid)
+    : (isAdminUser || item.createdBy === currentUid || isProjectOwner);
+
+  if (!canEditCurrentRecord) {
+    container.innerHTML = `
+      <div class="card card-error">
+        Only admins, the property creator, or the owning project creator can edit this record.
+      </div>
+    `;
+    return;
+  }
+
+  const currentSections = type === 'project'
+    ? PROJECT_SECTIONS
+    : isProjectLinkedUnit
+      ? [...PROJECT_SECTIONS, ...UNIT_ONLY_SECTIONS]
+      : SECTIONS;
 
   const sectionsHtml = currentSections.map(section => `
-    <div class="form-section ${section.id === 'property-info' ? '' : 'collapsed'}" data-section="${section.id}">
+    <div class="form-section ${(isProjectLinkedUnit && section.id.startsWith('project-')) || section.collapsed ? 'collapsed' : ''}" data-section="${section.id}">
       <div class="form-section-header">
         <span class="text-subheading">${section.title}</span>
       </div>
       <div class="form-section-body">
         ${section.fields.map(field => {
-          const val = field.type === 'file' ? (item.images?.[field.name] || []) : item[field.name];
-          return renderField(field, val);
+          const isLockedProjectField = isProjectLinkedUnit && PROJECT_FIELD_NAMES.has(field.name);
+          const sourceItem = isLockedProjectField ? (linkedProject || item) : item;
+          const val = field.type === 'file'
+            ? (sourceItem.images?.[field.name] || [])
+            : field.name === 'unitName'
+              ? (item.unitName || item.name || '')
+              : field.name === 'projectNotes'
+                ? (sourceItem.projectNotes || sourceItem.miscNotes || '')
+              : sourceItem[field.name];
+          return renderField(field, val, { locked: isLockedProjectField, sourceItem });
         }).join('')}
       </div>
     </div>
@@ -333,14 +384,14 @@ export const renderEditProperty = async (container, id, type = 'property') => {
   container.innerHTML = `
     <div class="page-header animate-enter">
       <h1 class="text-display">Edit ${type === 'project' ? 'Project' : 'Details'}</h1>
-      <p class="text-label">${item.name || ''}</p>
+      <p class="text-label">${item.unitName || item.name || ''}</p>
     </div>
     ${(item.projectId && type !== 'project') ? `
       <div class="project-context-banner" style="margin-bottom:var(--space-md)">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
         </svg>
-        <span>Fields inherited from project are locked. <a href="#project/${item.projectId}" style="color:var(--accent-green);text-decoration:underline">View project</a></span>
+        <span>Fields inherited from <strong>${escapeAttribute(linkedProject?.name || 'this project')}</strong> are locked. <a href="#project/${item.projectId}" style="color:var(--accent-green);text-decoration:underline">View project</a></span>
       </div>
     ` : ''}
     <form id="edit-form" class="animate-enter" style="--delay:100ms">
@@ -348,7 +399,7 @@ export const renderEditProperty = async (container, id, type = 'property') => {
       <div id="form-error"></div>
       <div style="display: flex; gap: var(--space-md)">
         <button type="submit" class="btn-primary" id="save-btn" style="flex: 2">Save Changes</button>
-        <a href="#property/${id}" class="btn-secondary" style="flex: 1">Cancel</a>
+        <a href="${type === 'project' ? `#project/${id}` : `#property/${id}`}" class="btn-secondary" style="flex: 1">Cancel</a>
       </div>
     </form>
   `;
@@ -359,23 +410,6 @@ export const renderEditProperty = async (container, id, type = 'property') => {
   container.querySelectorAll('.form-section-header').forEach(header => {
     header.addEventListener('click', () => header.parentElement.classList.toggle('collapsed'));
   });
-
-  // Lock project-level fields for units under a project
-  if (item.projectId && type !== 'project') {
-    PROJECT_FIELD_NAMES.forEach(fieldName => {
-      const input = container.querySelector(`#${fieldName}`);
-      if (input) {
-        const formGroup = input.closest('.form-group');
-        if (formGroup) formGroup.classList.add('field-locked');
-      }
-      // Handle toggle fields
-      const toggle = container.querySelector(`[data-toggle="${fieldName}"]`);
-      if (toggle) {
-        const formGroup = toggle.closest('.form-group');
-        if (formGroup) formGroup.classList.add('field-locked');
-      }
-    });
-  }
 
   // Toggle buttons
   container.querySelectorAll('.toggle-group').forEach(group => {
@@ -412,7 +446,7 @@ export const renderEditProperty = async (container, id, type = 'property') => {
   let cityCS = null;
   let tradeAreaCS = null;
 
-  if (cityInput) {
+  if (cityInput && !cityInput.hasAttribute('readonly') && !cityInput.disabled) {
     cityCS = initCreatableSelect(cityInput, facets.cities || [], {
       onChange(selectedCity) {
         if (tradeAreaCS) {
@@ -423,7 +457,7 @@ export const renderEditProperty = async (container, id, type = 'property') => {
     });
   }
 
-  if (tradeAreaInput) {
+  if (tradeAreaInput && !tradeAreaInput.hasAttribute('readonly') && !tradeAreaInput.disabled) {
     // Pre-filter trade areas by current city if one is set
     const currentCity = item?.city || '';
     const initialAreas = (currentCity && cityTradeAreaMap[currentCity])
@@ -707,9 +741,14 @@ export const renderEditProperty = async (container, id, type = 'property') => {
         return Array.from(inputEl?.files || []);
       };
 
-      const activeSections = currentType === 'project' ? PROJECT_SECTIONS : SECTIONS;
+      const activeSections = currentType === 'project'
+        ? PROJECT_SECTIONS
+        : (item.projectId ? [...PROJECT_SECTIONS, ...UNIT_ONLY_SECTIONS] : SECTIONS);
       activeSections.forEach(section => {
         section.fields.forEach(field => {
+          const isLockedProjectField = Boolean(item.projectId && currentType !== 'project' && PROJECT_FIELD_NAMES.has(field.name));
+          if (isLockedProjectField) return;
+
           if (field.type === 'toggle') {
             const active = container.querySelector(`[data-toggle="${field.name}"] .active`);
             const isYes = active?.dataset.value === 'yes';
@@ -758,6 +797,10 @@ export const renderEditProperty = async (container, id, type = 'property') => {
         });
       });
 
+      if (item.projectId && currentType !== 'project' && data.unitName) {
+        data.name = data.unitName;
+      }
+
       // Capture Map Coordinates
       const lat = document.getElementById('latitude')?.value;
       const lng = document.getElementById('longitude')?.value;
@@ -783,7 +826,7 @@ export const renderEditProperty = async (container, id, type = 'property') => {
           }
 
           const allFiles = fileFields.flatMap(f => Array.from(f.files || []));
-          const session = createUploadSession('Property Media', allFiles);
+          const session = createUploadSession(currentType === 'project' ? 'Project Media' : 'Property Media', allFiles);
 
           let hadUploadFailure = false;
           let fileOffset = 0;
@@ -796,7 +839,8 @@ export const renderEditProperty = async (container, id, type = 'property') => {
             }
 
             const currentOffset = fileOffset;
-            const path = `properties/${id}/${field.name}`;
+            const pathRoot = currentType === 'project' ? 'projects' : 'properties';
+            const path = `${pathRoot}/${id}/${field.name}`;
             try {
               const urls = await uploadMultipleFiles(field.files, path, null, (idx, pct, status, error) => {
                 const globalIdx = currentOffset + idx;
@@ -842,12 +886,12 @@ export const renderEditProperty = async (container, id, type = 'property') => {
           }
         };
 
-        // First update the property locally (fast)
+        // First update the record locally (fast)
         await updateItemWithRetry(id, data);
         
-        addUploadLog('Property data saved. Starting media upload...');
+        addUploadLog(`${currentType === 'project' ? 'Project' : 'Property'} data saved. Starting media upload...`);
         showToast('Changes saved. You can continue browsing while media uploads.', 'info');
-        window.location.hash = `#property/${id}`;
+        window.location.hash = currentType === 'project' ? `#project/${id}` : `#property/${id}`;
         
         // Start background upload
         setTimeout(() => {

@@ -1,6 +1,6 @@
 import { getInventoryItemById, updateInventoryItem, deleteInventoryItem, createInventoryItem } from '../backend/inventoryService.js';
 import { getProjectById } from '../backend/projectService.js';
-import { SECTIONS } from '../config/propertyFields.js';
+import { SECTIONS, PROJECT_INHERITED_FIELD_NAMES, PROJECT_MEDIA_FIELD_NAMES } from '../config/propertyFields.js';
 import {
   getFileExtensionLabel,
   getFileKindLabel,
@@ -27,6 +27,10 @@ function formatCoordinates(item) {
   const longitude = Number(item.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return '';
   return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+}
+
+function getDisplayName(item) {
+  return item?.unitName || item?.name || 'Unnamed Property';
 }
 
 function getPriorityLocationValue(item) {
@@ -160,6 +164,63 @@ function renderFileTile(url, caption = '') {
   `;
 }
 
+function deriveDownloadFilename(url, fallbackBase = 'file') {
+  try {
+    const parsed = new URL(url);
+    const pathMatch = parsed.pathname.match(/\/o\/(.+)$/);
+    if (pathMatch?.[1]) {
+      const decoded = decodeURIComponent(pathMatch[1]);
+      const parts = decoded.split('/');
+      const last = parts[parts.length - 1];
+      if (last) return last;
+    }
+
+    const pathnameParts = parsed.pathname.split('/');
+    const lastPathPart = pathnameParts[pathnameParts.length - 1];
+    if (lastPathPart) return decodeURIComponent(lastPathPart);
+  } catch (_) {
+    // Ignore parse issues and use fallback below.
+  }
+
+  const extension = getFileExtensionLabel(url).toLowerCase();
+  return `${fallbackBase}.${extension}`;
+}
+
+async function triggerCadDownload(url) {
+  const filename = deriveDownloadFilename(url, 'cad-file');
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Download failed (${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: filename,
+        text: 'Save or open the CAD file on your device.',
+      });
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  } catch (error) {
+    window.open(url, '_blank', 'noopener');
+  }
+}
+
 function buildPropertyInformationSummary(item, priorityLocationValue) {
   const propertySection = SECTIONS.find((section) => section.id === 'property-info');
   if (!propertySection) {
@@ -275,8 +336,9 @@ export const renderPropertyDetail = async (container, id) => {
     // Fetch project data if this unit belongs to a project
     let project = null;
     if (item.projectId) {
-      try { project = await getProjectById(item.projectId); } catch (e) { /* project may be deleted */ }
+      try { project = await getProjectById(item.projectId, { preferFresh: true }); } catch (e) { /* project may be deleted */ }
     }
+    const displayName = getDisplayName(item);
     const projectBannerHtml = project ? `
       <a href="#project/${item.projectId}" class="project-context-banner animate-enter" style="text-decoration:none; margin-bottom:var(--space-md)">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -423,7 +485,7 @@ export const renderPropertyDetail = async (container, id) => {
                     : isPdfUrl(m.url)
                       ? renderFileTile(m.url, 'Tap to open')
                       : (isDocUrl(m.url) || isCadUrl(m.url))
-                        ? renderFileTile(m.url, isCadUrl(m.url) ? 'Tap to open CAD' : 'Tap to open')
+                        ? renderFileTile(m.url, isCadUrl(m.url) ? 'Tap to download CAD' : 'Tap to open')
                         : `<img src="${m.url}" loading="eager" />`
                   }
                 </div>
@@ -452,7 +514,7 @@ export const renderPropertyDetail = async (container, id) => {
       <div class="page-header animate-enter">
         <div style="display:flex; justify-content:space-between; align-items:flex-start">
           <div>
-            <h1 class="text-display">${item.name}</h1>
+            <h1 class="text-display">${displayName}</h1>
             ${priorityMapLink
               ? `<a href="${priorityMapLink}" target="_blank" rel="noopener" class="text-label card-location-link">${priorityLocationLabel || 'Open location'}</a>`
               : `<p class="text-label">${priorityLocationLabel || 'No location'}</p>`
@@ -565,14 +627,14 @@ export const renderPropertyDetail = async (container, id) => {
         const sqft = item.size ? `${item.size} sqft` : 'Size N/A';
         const rate = item.price ? `₹${item.price}/sqft` : 'Rate N/A';
         const shareText = [
-          `Property: ${item.name}`,
+          `Property: ${displayName}`,
           `Trade Area: ${area}`,
           `Location: ${shareLocation}`,
           `Size: ${sqft}`,
           `Rate: ${rate}`
         ].join('\n');
         const shareData = {
-          title: `Foottfall: ${item.name}`,
+          title: `Foottfall: ${displayName}`,
           text: shareText,
           url: window.location.href
         };
@@ -594,7 +656,7 @@ export const renderPropertyDetail = async (container, id) => {
     if (copySummaryBtn) {
       copySummaryBtn.onclick = async () => {
         const summaryBody = buildPropertyInformationSummary(item, priorityLocationValue);
-        const summaryText = `${item.name || 'Unnamed Property'}\n\n${summaryBody}`;
+        const summaryText = `${displayName}\n\n${summaryBody}`;
 
         try {
           await navigator.clipboard.writeText(summaryText);
@@ -612,13 +674,17 @@ export const renderPropertyDetail = async (container, id) => {
     // ─── Lightbox logic ───
 
     window.openLightbox = (src) => {
-      if (isPdfUrl(src) || isDocUrl(src) || isCadUrl(src)) {
+      if (isCadUrl(src)) {
+        triggerCadDownload(src);
+        return;
+      }
+
+      if (isPdfUrl(src) || isDocUrl(src)) {
         // iOS can't download docs natively — open via Google Docs Viewer for Office files
         if (isDocUrl(src)) {
           window.open(`https://docs.google.com/gview?url=${encodeURIComponent(src)}&embedded=false`, '_blank', 'noopener');
         } else {
-          // PDFs and CAD files: open directly in new tab
-          // Note: CAD files (.dwg/.dxf) will likely trigger a download or "open in..." prompt on iOS
+          // PDFs open directly in a new tab.
           window.open(src, '_blank', 'noopener');
         }
         return;
@@ -678,8 +744,20 @@ export const renderPropertyDetail = async (container, id) => {
             delete cloneData.id;
             delete cloneData.created_at;
             delete cloneData.updated_at;
-            
-            let baseName = cloneData.name || 'Unnamed Property';
+
+            if (cloneData.projectId) {
+              PROJECT_INHERITED_FIELD_NAMES.forEach((fieldName) => {
+                if (fieldName !== 'name') delete cloneData[fieldName];
+              });
+
+              if (cloneData.images && typeof cloneData.images === 'object') {
+                PROJECT_MEDIA_FIELD_NAMES.forEach((fieldName) => {
+                  delete cloneData.images[fieldName];
+                });
+              }
+            }
+
+            let baseName = cloneData.unitName || cloneData.name || 'Unnamed Property';
             const copyMatch = baseName.match(/ Copy( \d+)?$/);
             let copyNumber = 1;
             if (copyMatch) {
@@ -690,7 +768,11 @@ export const renderPropertyDetail = async (container, id) => {
                 copyNumber = 2;
               }
             }
-            cloneData.name = `${baseName} Copy${copyNumber > 1 ? ` ${copyNumber}` : ''}`;
+            const duplicateName = `${baseName} Copy${copyNumber > 1 ? ` ${copyNumber}` : ''}`;
+            cloneData.name = duplicateName;
+            if (cloneData.projectId || cloneData.unitName) {
+              cloneData.unitName = duplicateName;
+            }
             
             const newId = await createInventoryItem(cloneData);
             showToast('Property duplicated successfully', 'success');

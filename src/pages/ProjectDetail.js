@@ -1,4 +1,5 @@
 import { getProjectById, getProjectUnits, deleteProject, updateProject } from '../backend/projectService.js';
+import { PROJECT_INHERITED_FIELD_NAMES, PROJECT_MEDIA_FIELD_NAMES } from '../config/propertyFields.js';
 import { isBrokerItem, isMergeableItem } from '../utils/propertyFlags.js';
 
 /**
@@ -22,7 +23,7 @@ export async function renderProjectDetail(container, projectId) {
   try {
     let project, units;
     try {
-      project = await getProjectById(projectId);
+      project = await getProjectById(projectId, { preferFresh: true });
       try {
         units = await getProjectUnits(projectId);
       } catch (e) {
@@ -58,6 +59,11 @@ export async function renderProjectDetail(container, projectId) {
     if (project.contactName) infoRows.push(buildInfoRow('Contact', project.contactName));
     if (project.contactDesignation) infoRows.push(buildInfoRow('Designation', project.contactDesignation));
     if (project.contactInfo) infoRows.push(buildInfoRow('Phone/Email', project.contactInfo));
+    const projectNotes = project.projectNotes || project.miscNotes;
+    if (projectNotes) infoRows.push(buildInfoRow('Notes', escHtml(projectNotes)));
+    if (project.presentationAvailable && project.presentationLink) {
+      infoRows.push(buildInfoRow('Presentation Link', `<a href="${project.presentationLink}" target="_blank" rel="noopener" style="color:var(--accent-green);text-decoration:underline">Open presentation</a>`));
+    }
     if (project.googleMapsLink) {
       infoRows.push(buildInfoRow('Map', `<a href="${project.googleMapsLink}" target="_blank" rel="noopener" style="color:var(--accent-green);text-decoration:underline">View on Google Maps</a>`));
     }
@@ -76,6 +82,7 @@ export async function renderProjectDetail(container, projectId) {
         `;
       }
     }
+    const projectMediaHtml = buildProjectMediaHtml(project);
 
     // Build unit cards
     let unitsHtml = '';
@@ -120,6 +127,7 @@ export async function renderProjectDetail(container, projectId) {
         <div class="project-detail-info">
           ${infoRows.join('')}
         </div>
+        ${projectMediaHtml}
       </div>
 
       <div class="project-units-section">
@@ -198,10 +206,10 @@ export async function renderProjectDetail(container, projectId) {
             } catch (e) { console.warn('Failed to delete unit', unit.id, e); }
           }
         } else {
-          // Unlink units from project (remove projectId)
+          // Convert units into standalone properties before removing the project link.
           for (const unit of units) {
             try {
-              await updateInventoryItem(unit.id, { projectId: null });
+              await updateInventoryItem(unit.id, buildStandaloneUnitData(unit, project));
             } catch (e) { console.warn('Failed to unlink unit', unit.id, e); }
           }
         }
@@ -234,6 +242,96 @@ function buildInfoRow(label, value) {
     <div class="project-detail-info-row">
       <span class="project-detail-info-label">${label}</span>
       <span class="project-detail-info-value">${value}</span>
+    </div>
+  `;
+}
+
+function hasMeaningfulValue(value) {
+  return value !== undefined && value !== null && value !== '';
+}
+
+function buildStandaloneUnitData(unit, project) {
+  const data = {
+    projectId: null,
+    name: unit.unitName || unit.name || project?.name || 'Unnamed Property',
+  };
+
+  if (hasMeaningfulValue(unit.unitName)) {
+    data.unitName = unit.unitName;
+  }
+
+  PROJECT_INHERITED_FIELD_NAMES.forEach((fieldName) => {
+    if (fieldName === 'name') return;
+    if (fieldName === 'projectNotes') return;
+    const value = hasMeaningfulValue(project?.[fieldName]) ? project[fieldName] : unit?.[fieldName];
+    if (hasMeaningfulValue(value)) {
+      data[fieldName] = value;
+    }
+  });
+
+  const unitNotes = String(unit?.miscNotes || '').trim();
+  const projectNotes = String(project?.projectNotes || project?.miscNotes || '').trim();
+  if (projectNotes) {
+    data.miscNotes = unitNotes ? `${unitNotes}\n\nProject notes: ${projectNotes}` : projectNotes;
+  } else if (unitNotes) {
+    data.miscNotes = unit.miscNotes;
+  }
+
+  const mergedImages = { ...(unit.images || {}) };
+  PROJECT_MEDIA_FIELD_NAMES.forEach((fieldName) => {
+    const projectUrls = Array.isArray(project?.images?.[fieldName]) ? project.images[fieldName] : [];
+    if (projectUrls.length > 0) {
+      mergedImages[fieldName] = projectUrls;
+    }
+  });
+
+  if (Object.keys(mergedImages).length > 0) {
+    data.images = mergedImages;
+  }
+
+  return data;
+}
+
+function buildProjectMediaHtml(project) {
+  const mediaSections = [];
+  const entryMedia = Array.isArray(project.images?.entryToBuilding) ? project.images.entryToBuilding : [];
+  const presentationFiles = Array.isArray(project.images?.presentationFile) ? project.images.presentationFile : [];
+
+  if (entryMedia.length > 0) {
+    mediaSections.push(`
+      <div style="margin-top:var(--space-md)">
+        <div class="project-detail-info-label" style="margin-bottom:6px">Entry To Building</div>
+        <div style="display:flex; flex-direction:column; gap:6px">
+          ${entryMedia.map((url, index) => `
+            <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent-green);text-decoration:underline">
+              Open entry media ${index + 1}
+            </a>
+          `).join('')}
+        </div>
+      </div>
+    `);
+  }
+
+  if (presentationFiles.length > 0) {
+    mediaSections.push(`
+      <div style="margin-top:var(--space-md)">
+        <div class="project-detail-info-label" style="margin-bottom:6px">Presentation Files</div>
+        <div style="display:flex; flex-direction:column; gap:6px">
+          ${presentationFiles.map((url, index) => `
+            <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent-green);text-decoration:underline">
+              Open presentation file ${index + 1}
+            </a>
+          `).join('')}
+        </div>
+      </div>
+    `);
+  }
+
+  if (mediaSections.length === 0) return '';
+
+  return `
+    <div class="project-detail-info">
+      ${mediaSections.join('')}
     </div>
   `;
 }

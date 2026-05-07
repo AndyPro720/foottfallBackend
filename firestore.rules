@@ -116,6 +116,16 @@ service cloud.firestore {
       return exists(path) && get(path).data.createdBy == request.auth.uid;
     }
 
+    function canManageInventory(data) {
+      return isAdmin() ||
+        data.createdBy == request.auth.uid ||
+        (
+          'projectId' in data &&
+          data.projectId != null &&
+          isProjectCreator(data.projectId)
+        );
+    }
+
     function inventoryAllowedKeys() {
       return [
         'name',
@@ -255,9 +265,13 @@ service cloud.firestore {
         'city',
         'tradeArea',
         'buildingAge',
+        'miscNotes',
+        'projectNotes',
         'contactName',
         'contactDesignation',
         'contactInfo',
+        'presentationAvailable',
+        'presentationLink',
         'latitude',
         'longitude',
         'unitCount',
@@ -395,10 +409,10 @@ service cloud.firestore {
       allow update: if isActive() &&
         isValidInventory(request.resource.data) &&
         inventoryImmutableFieldsUnchanged() &&
-        (isAdmin() || resource.data.createdBy == request.auth.uid);
+        canManageInventory(resource.data);
 
       allow delete: if isActive() &&
-        (isAdmin() || resource.data.createdBy == request.auth.uid);
+        canManageInventory(resource.data);
     }
 
     match /{document=**} {

@@ -17,6 +17,35 @@ function withTimeout(promise, ms, message = "Operation timed out") {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+function timestampToNumber(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  if (typeof ts.seconds === "number") return ts.seconds * 1000;
+  const numeric = Number(ts);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function listSignature(items) {
+  return (items || [])
+    .map((item) => [
+      item.id,
+      timestampToNumber(item.updated_at),
+      timestampToNumber(item.created_at),
+      item.unitCount || 0,
+      item.mediaUploadPending ? 1 : 0,
+      item.syncPending ? 1 : 0,
+    ].join("|"))
+    .join("::");
+}
+
+function mapProjectDoc(docSnap) {
+  return {
+    id: docSnap.id,
+    ...docSnap.data(),
+    syncPending: docSnap.metadata.hasPendingWrites,
+  };
+}
+
 /**
  * Creates a new project.
  * @param {Object} data The project data (project-level fields only).
@@ -47,8 +76,9 @@ export async function createProject(data) {
  * @param {Function} onNewData Optional callback fired if background sync finds updated data.
  * @returns {Promise<Array>} Array of project documents.
  */
-export async function getProjects(onNewData = null) {
+export async function getProjects(onNewData = null, options = {}) {
   try {
+    const { preferFresh = false } = options;
     let q = query(collection(db, PROJECTS_COLLECTION));
 
     // Role-based filtering: admins see all, agents see only their own
@@ -57,46 +87,40 @@ export async function getProjects(onNewData = null) {
       : await getCurrentUserRole();
     if (role !== 'admin' && role !== 'superadmin') {
       const uid = auth.currentUser?.uid;
+      if (!uid) return [];
       if (uid) {
         q = query(q, where("createdBy", "==", uid));
       }
     }
 
-    // 1. Try Cache First
+    let cachedItems = null;
     try {
       const cacheSnapshot = await getDocsFromCache(q);
       if (!cacheSnapshot.empty) {
-        const cachedItems = cacheSnapshot.docs.map(d => ({
-          id: d.id, ...d.data(), syncPending: d.metadata.hasPendingWrites
-        }));
+        cachedItems = cacheSnapshot.docs.map(mapProjectDoc);
 
-        // 2. Background Sync
-        if (navigator.onLine && onNewData) {
-          getDocsFromServer(q).then(serverSnapshot => {
-            const serverItems = serverSnapshot.docs.map(d => ({
-              id: d.id, ...d.data(), syncPending: d.metadata.hasPendingWrites
-            }));
-            const cachedIds = cachedItems.map(c => c.id).sort().join(',');
-            const serverIds = serverItems.map(s => s.id).sort().join(',');
-            if (cachedIds !== serverIds) {
-              onNewData(serverItems);
-            }
-          }).catch(e => console.warn("Background project sync failed", e));
+        if (!preferFresh) {
+          if (navigator.onLine && onNewData) {
+            getDocsFromServer(q).then(serverSnapshot => {
+              const serverItems = serverSnapshot.docs.map(mapProjectDoc);
+              if (listSignature(cachedItems) !== listSignature(serverItems)) {
+                onNewData(serverItems);
+              }
+            }).catch(e => console.warn("Background project sync failed", e));
+          }
+
+          return cachedItems;
         }
-
-        return cachedItems;
       }
     } catch (e) {
       // Ignore cache read failures
     }
 
-    // 3. Cache Miss: server read with timeout
     try {
       const serverSnapshot = await withTimeout(getDocsFromServer(q), 5000, "Server timeout");
-      return serverSnapshot.docs.map(d => ({
-        id: d.id, ...d.data(), syncPending: d.metadata.hasPendingWrites
-      }));
+      return serverSnapshot.docs.map(mapProjectDoc);
     } catch (e) {
+      if (cachedItems) return cachedItems;
       if (e.message === "Server timeout") return [];
       throw e;
     }
@@ -111,28 +135,38 @@ export async function getProjects(onNewData = null) {
  * @param {string} id The document ID.
  * @returns {Promise<Object|null>} The project data or null if not found.
  */
-export async function getProjectById(id) {
+export async function getProjectById(id, options = {}) {
   try {
+    const { preferFresh = false } = options;
     const docRef = doc(db, PROJECTS_COLLECTION, id);
+    let cachedProject = null;
 
-    // Try cache first
     try {
       const cacheSnap = await getDocFromCache(docRef);
       if (cacheSnap.exists()) {
-        return { id: cacheSnap.id, ...cacheSnap.data() };
+        cachedProject = { id: cacheSnap.id, ...cacheSnap.data() };
+        if (!preferFresh) {
+          return cachedProject;
+        }
       }
     } catch (e) {
       // Cache miss
     }
 
-    // Fallback to server
-    const snap = await withTimeout(getDocFromServer(docRef), 5000, "Server read timeout");
-    if (snap.exists()) {
-      return { id: snap.id, ...snap.data() };
+    try {
+      const snap = await withTimeout(getDocFromServer(docRef), 5000, "Server read timeout");
+      if (snap.exists()) {
+        return { id: snap.id, ...snap.data() };
+      }
+      return null;
+    } catch (error) {
+      if (cachedProject) return cachedProject;
+      if (error.message === "Server read timeout") return null;
+      console.error("Error getting project:", error);
+      throw error;
     }
-    return null;
-  } catch (error) {
-    if (error.message === "Server read timeout") return null;
+  }
+  catch (error) {
     console.error("Error getting project:", error);
     throw error;
   }

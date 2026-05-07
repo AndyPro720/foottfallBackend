@@ -87,6 +87,14 @@ export const SECTIONS = [
   }
 ];
 
+const UNIT_NAME_FIELD = {
+  name: 'unitName',
+  label: 'Unit Name / Number',
+  type: 'text',
+  required: true,
+  placeholder: 'e.g., Unit 204, Shop G-12'
+};
+
 // ─── Project-Level Field Definitions ───
 // Fields shared across all units in a project (building/complex level)
 
@@ -99,12 +107,12 @@ export const PROJECT_SECTIONS = [
       { name: 'name', label: 'Project / Building Name', type: 'text', required: true, placeholder: 'e.g., Phoenix Mall' },
       { name: 'vicinityBrands', label: 'Vicinity Brands', type: 'text', placeholder: 'e.g., Starbucks, Zara, H&M' },
       { name: 'buildingType', label: 'Building Type', type: 'select', options: ['Mall', 'Standalone', 'High Street'], required: false },
-      { name: 'entryToBuilding', label: 'Entry to Building Photo', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'googleMapsLink', label: 'Google Map Link', type: 'text', placeholder: 'Paste Google Maps URL' },
       { name: 'location', label: 'Exact Location / Address', type: 'text', required: false, placeholder: 'Full address' },
       { name: 'city', label: 'City', type: 'creatable-select', required: false, placeholder: 'e.g., Pune, Mumbai' },
       { name: 'tradeArea', label: 'Trade Area', type: 'creatable-select', placeholder: 'e.g., MG Road, Connaught Place' },
       { name: 'buildingAge', label: 'Age of Building (years)', type: 'number', placeholder: 'Approximate age' },
+      { name: 'projectNotes', label: 'Project Notes', type: 'text', placeholder: 'Any project-level notes...' },
     ]
   },
   {
@@ -119,10 +127,14 @@ export const PROJECT_SECTIONS = [
   },
   {
     id: 'project-photos',
-    title: 'Building Photos',
+    title: 'Building Media & Documents',
     collapsed: true,
     fields: [
+      { name: 'entryToBuilding', label: 'Entry to Building Photo', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'buildingFacade', label: 'Building Facade', type: 'file', accept: 'image/*,video/*', multiple: true },
+      { name: 'presentationAvailable', label: 'Presentation Available', type: 'toggle' },
+      { name: 'presentationLink', label: 'Presentation Link', type: 'text', placeholder: 'Paste presentation URL', conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
+      { name: 'presentationFile', label: 'Presentation Attachment', type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,image/*,video/*', multiple: true, conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
     ]
   }
 ];
@@ -131,6 +143,15 @@ export const PROJECT_SECTIONS = [
 export const PROJECT_FIELD_NAMES = new Set(
   PROJECT_SECTIONS.flatMap(s => s.fields.map(f => f.name))
 );
+
+export const PROJECT_MEDIA_FIELD_NAMES = PROJECT_SECTIONS
+  .flatMap(section => section.fields.filter(field => field.type === 'file').map(field => field.name));
+
+export const PROJECT_INHERITED_FIELD_NAMES = new Set([
+  ...PROJECT_FIELD_NAMES,
+  'latitude',
+  'longitude',
+]);
 
 // ─── Unit-Only Field Definitions ───
 // Fields specific to individual units when adding under a project
@@ -141,12 +162,14 @@ export const UNIT_ONLY_SECTIONS = [
     title: 'Unit Information',
     collapsed: false,
     fields: [
-      { name: 'unitName', label: 'Unit Name / Number', type: 'text', required: true, placeholder: 'e.g., Unit 204, Shop G-12' },
+      UNIT_NAME_FIELD,
       { name: 'size', label: 'Carpet Area (sq ft)', type: 'number', required: false, placeholder: 'Carpet area' },
       { name: 'floor', label: 'Which Floor', type: 'text', placeholder: 'e.g., Ground, 1st, 2nd' },
       { name: 'frontage', label: 'Frontage (ft)', type: 'text', placeholder: 'e.g., 25 ft' },
       { name: 'propertyStatus', label: 'Property Status', type: 'select', options: ['Occupied', 'Available', 'Under Construction'], required: false },
       { name: 'completionTime', label: 'Completion Time (Months)', type: 'number', placeholder: 'Months to completion', conditionalOn: { field: 'propertyStatus', value: 'Under Construction' } },
+      { name: 'partOC', label: 'Part OC', type: 'text', placeholder: 'e.g., Expected / Available / N/A', conditionalOn: { field: 'propertyStatus', value: 'Under Construction' } },
+      { name: 'completeOC', label: 'Complete OC', type: 'text', placeholder: 'e.g., Expected / Available / N/A', conditionalOn: { field: 'propertyStatus', value: 'Under Construction' } },
       { name: 'suitableFor', label: 'Suitable For', type: 'text', placeholder: 'e.g., F&B, Retail, Services' },
       { name: 'miscNotes', label: 'Misc Notes', type: 'text', placeholder: 'Any additional notes...' },
     ]
@@ -192,10 +215,6 @@ export const UNIT_ONLY_SECTIONS = [
       { name: 'signage', label: 'Signage', type: 'file', accept: 'image/*,video/*', multiple: true },
       { name: 'floorPlan', label: 'Floor Plan', type: 'file', accept: 'image/*,video/*,.pdf', multiple: true },
       { name: 'cadFiles', label: 'CAD Files', type: 'file', accept: '.dwg,.dxf', multiple: true },
-      { name: 'presentationAvailable', label: 'Presentation Available', type: 'toggle' },
-      { name: 'presentationLink', label: 'Presentation Link', type: 'text', placeholder: 'Paste presentation URL', conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
-      { name: 'presentationFile', label: 'Presentation Attachment', type: 'file', accept: '.pdf,.ppt,.pptx,.doc,.docx,image/*,video/*', multiple: true, conditionalOn: { field: 'presentationAvailable', value: 'yes' } },
     ]
   }
 ];
-

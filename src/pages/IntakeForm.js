@@ -241,7 +241,7 @@ export const renderIntakeForm = async (container) => {
   // Load project data if adding a unit under a project
   if (projectIdFromUrl) {
     try {
-      projectData = await getProjectById(projectIdFromUrl);
+      projectData = await getProjectById(projectIdFromUrl, { preferFresh: true });
     } catch (e) {
       console.warn('Could not load project for auto-populate', e);
     }

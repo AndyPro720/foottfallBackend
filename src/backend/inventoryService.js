@@ -140,6 +140,62 @@ function itemSignature(item) {
   ].join("|");
 }
 
+function mapInventoryDoc(docSnap) {
+  return {
+    id: docSnap.id,
+    ...docSnap.data(),
+    syncPending: docSnap.metadata.hasPendingWrites,
+  };
+}
+
+function chunkValues(values, size) {
+  const chunks = [];
+  for (let i = 0; i < values.length; i += size) {
+    chunks.push(values.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function dedupeInventoryItems(items) {
+  const byId = new Map();
+  (items || []).forEach((item) => {
+    if (!item?.id) return;
+    byId.set(item.id, item);
+  });
+  return [...byId.values()];
+}
+
+function buildInventoryQuery(filters, role, uid, projectIdChunk = null) {
+  let q = query(collection(db, INVENTORY_COLLECTION));
+
+  if (role !== 'admin' && role !== 'superadmin' && uid) {
+    if (Array.isArray(projectIdChunk) && projectIdChunk.length > 0) {
+      q = query(q, where("projectId", "in", projectIdChunk));
+    } else {
+      q = query(q, where("createdBy", "==", uid));
+    }
+  }
+
+  for (const [key, value] of Object.entries(filters)) {
+    q = query(q, where(key, "==", value));
+  }
+
+  return q;
+}
+
+async function executeInventoryQueries(queries, reader) {
+  const results = await Promise.allSettled(queries.map((q) => reader(q)));
+  const fulfilled = results.filter((result) => result.status === 'fulfilled');
+  if (fulfilled.length === 0) {
+    const firstFailure = results.find((result) => result.status === 'rejected');
+    throw firstFailure?.reason || new Error("Inventory query failed");
+  }
+
+  return dedupeInventoryItems(
+    fulfilled.flatMap((result) => result.value.docs.map(mapInventoryDoc))
+  );
+}
+
 /**
  * Creates a new inventory item.
  * @param {Object} data The inventory property data.
@@ -247,8 +303,7 @@ export async function getInventoryItemById(id, onNewData = null) {
  */
 export async function getInventoryItems(filters = {}, onNewData = null, options = {}) {
   try {
-    let q = query(collection(db, INVENTORY_COLLECTION));
-    const { projectIds = [] } = options;
+    const { projectIds = [], preferFresh = false } = options;
 
     // Role-based filtering: Only admins see everything. 
     // Regular users (agents) see:
@@ -257,60 +312,42 @@ export async function getInventoryItems(filters = {}, onNewData = null, options 
     const role = (typeof window !== "undefined" && window.userProfile?.role)
       ? window.userProfile.role
       : await getCurrentUserRole();
-    
-    if (role !== 'admin' && role !== 'superadmin') {
-      const uid = auth.currentUser?.uid;
-      if (uid) {
-        if (projectIds.length > 0) {
-          // Firestore 'in' query limit is 30.
-          const limitedIds = projectIds.slice(0, 30);
-          q = query(q, where("projectId", "in", limitedIds));
-        } else {
-          q = query(q, where("createdBy", "==", uid));
-        }
-      }
+    const uid = auth.currentUser?.uid;
+    if (role !== 'admin' && role !== 'superadmin' && !uid) {
+      return [];
     }
+    const normalizedProjectIds = [...new Set(projectIds.filter(Boolean))];
+    const projectIdChunks = role !== 'admin' && role !== 'superadmin' && normalizedProjectIds.length > 0
+      ? chunkValues(normalizedProjectIds, 30)
+      : [];
+    const queries = projectIdChunks.length > 0
+      ? projectIdChunks.map((chunk) => buildInventoryQuery(filters, role, uid, chunk))
+      : [buildInventoryQuery(filters, role, uid)];
 
-    // Apply additional filters
-    for (const [key, value] of Object.entries(filters)) {
-      q = query(q, where(key, "==", value));
-    }
-
-    // 1. Try Cache First for Instant Rendering
+    let cachedItems = null;
     try {
-      const cacheSnapshot = await getDocsFromCache(q);
-      if (!cacheSnapshot.empty) {
-        const cachedItems = cacheSnapshot.docs.map(d => ({ 
-          id: d.id, ...d.data(), syncPending: d.metadata.hasPendingWrites
-        }));
-        
-        // 2. Queue Background Background Sync
-        if (navigator.onLine) {
-          getDocsFromServer(q).then(serverSnapshot => {
-            const serverItems = serverSnapshot.docs.map(d => ({ 
-              id: d.id, ...d.data(), syncPending: d.metadata.hasPendingWrites
-            }));
-            
-            // Basic data diff logic
+      cachedItems = await executeInventoryQueries(queries, (q) => getDocsFromCache(q));
+      if (!preferFresh && cachedItems.length > 0) {
+        if (navigator.onLine && onNewData) {
+          executeInventoryQueries(queries, (q) => getDocsFromServer(q)).then((serverItems) => {
             if (listSignature(cachedItems) !== listSignature(serverItems)) {
-              if (onNewData) onNewData(serverItems);
+              onNewData(serverItems);
             }
           }).catch(e => console.warn("Background list sync failed", e));
         }
-
         return cachedItems;
       }
     } catch (e) {
       // Ignore cache read failures 
     }
 
-    // 3. Cache Miss: We MUST wait for the network, but use a tighter timeout
     try {
-      const serverSnapshot = await withTimeout(getDocsFromServer(q), 5000, "Server timeout");
-      return serverSnapshot.docs.map(d => ({ 
-        id: d.id, ...d.data(), syncPending: d.metadata.hasPendingWrites
-      }));
+      return await executeInventoryQueries(
+        queries,
+        (q) => withTimeout(getDocsFromServer(q), 5000, "Server timeout")
+      );
     } catch (e) {
+      if (cachedItems) return cachedItems;
       if (e.message === "Server timeout") return []; // Return gracefully instead of crashing UI
       throw e;
     }
