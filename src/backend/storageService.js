@@ -1,4 +1,4 @@
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject, listAll } from "firebase/storage";
 import { storage } from "./firebaseConfig.js";
 import { heicTo } from "heic-to";
 
@@ -145,6 +145,44 @@ export async function deleteFile(path) {
     await deleteObject(storageRef);
   } catch (error) {
     console.error("Storage Error during deletion:", error);
+    throw error;
+  }
+}
+
+async function deletePrefixContents(prefixRef) {
+  const listing = await listAll(prefixRef);
+  const failures = [];
+
+  const fileResults = await Promise.allSettled(
+    listing.items.map((itemRef) => deleteObject(itemRef))
+  );
+
+  fileResults.forEach((result) => {
+    if (result.status === "rejected" && result.reason?.code !== "storage/object-not-found") {
+      failures.push(result.reason);
+    }
+  });
+
+  const nestedResults = await Promise.all(
+    listing.prefixes.map((nestedPrefixRef) => deletePrefixContents(nestedPrefixRef))
+  );
+
+  nestedResults.forEach((nestedFailures) => {
+    failures.push(...nestedFailures);
+  });
+
+  return failures;
+}
+
+export async function deleteFilesByPrefix(prefix) {
+  try {
+    const prefixRef = ref(storage, prefix);
+    const failures = await deletePrefixContents(prefixRef);
+    if (failures.length > 0) {
+      throw new Error(`Failed to delete ${failures.length} media file(s).`);
+    }
+  } catch (error) {
+    console.error("Storage Error during prefix deletion:", error);
     throw error;
   }
 }

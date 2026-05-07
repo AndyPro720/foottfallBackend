@@ -1,6 +1,15 @@
 import { getProjectById, getProjectUnits, deleteProject, updateProject } from '../backend/projectService.js';
 import { PROJECT_INHERITED_FIELD_NAMES, PROJECT_MEDIA_FIELD_NAMES } from '../config/propertyFields.js';
 import { isBrokerItem, isMergeableItem } from '../utils/propertyFlags.js';
+import {
+  getFileExtensionLabel,
+  getFileKindLabel,
+  isCadUrl,
+  isDocUrl,
+  isPdfUrl,
+  isVideoUrl,
+} from '../utils/media.js';
+import { openCadFile } from '../utils/fileActions.js';
 
 /**
  * Renders the Project Detail view showing project info + unit list.
@@ -68,21 +77,7 @@ export async function renderProjectDetail(container, projectId) {
       infoRows.push(buildInfoRow('Map', `<a href="${project.googleMapsLink}" target="_blank" rel="noopener" style="color:var(--accent-green);text-decoration:underline">View on Google Maps</a>`));
     }
 
-    // Build facade preview
-    let facadeHtml = '';
-    const facadeImages = project.images?.buildingFacade || [];
-    if (facadeImages.length > 0) {
-      const firstImg = facadeImages[0];
-      const imgUrl = typeof firstImg === 'string' ? firstImg : firstImg.url;
-      if (imgUrl) {
-        facadeHtml = `
-          <div style="margin-top:var(--space-md);border-radius:var(--radius-md);overflow:hidden;max-height:200px">
-            <img src="${imgUrl}" alt="Building Facade" style="width:100%;height:200px;object-fit:cover" loading="lazy">
-          </div>
-        `;
-      }
-    }
-    const projectMediaHtml = buildProjectMediaHtml(project);
+    const projectMediaView = buildProjectMediaView(project);
 
     // Build unit cards
     let unitsHtml = '';
@@ -107,6 +102,8 @@ export async function renderProjectDetail(container, projectId) {
         Back to Home
       </button>
 
+      ${projectMediaView.carouselHtml}
+
       <div class="project-detail-header">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm)">
           <span class="project-badge" style="position:static">PROJECT</span>
@@ -123,11 +120,10 @@ export async function renderProjectDetail(container, projectId) {
           ${project.createdBy ? `(${escHtml(window.__cachedUserRoleMap?.[project.createdBy] || 'agent')})` : ''} 
           · ${project.created_at ? new Date(project.created_at.seconds * 1000).toLocaleDateString() : 'Unknown date'}
         </div>
-        ${facadeHtml}
         <div class="project-detail-info">
           ${infoRows.join('')}
         </div>
-        ${projectMediaHtml}
+        ${projectMediaView.explorerHtml}
       </div>
 
       <div class="project-units-section">
@@ -154,6 +150,8 @@ export async function renderProjectDetail(container, projectId) {
         </button>
       </div>
     `;
+
+    attachProjectMediaInteractions(projectMediaView.mediaItems);
 
     // Share Project handler
     document.getElementById('share-project-btn').onclick = async () => {
@@ -199,10 +197,13 @@ export async function renderProjectDetail(container, projectId) {
       const deleteAllUnits = confirm('Do you also want to PERMANENTLY DELETE all units inside this project?\n\nOK = Delete all units\nCancel = Keep units (they will be unlinked)');
 
       try {
+        let mediaCleanupWarnings = 0;
+
         if (deleteAllUnits) {
           for (const unit of units) {
             try {
-              await deleteInventoryItem(unit.id);
+              const result = await deleteInventoryItem(unit.id);
+              if (result?.mediaCleanupFailed) mediaCleanupWarnings++;
             } catch (e) { console.warn('Failed to delete unit', unit.id, e); }
           }
         } else {
@@ -213,10 +214,26 @@ export async function renderProjectDetail(container, projectId) {
             } catch (e) { console.warn('Failed to unlink unit', unit.id, e); }
           }
         }
+
+        if (deleteAllUnits || unitCount === 0) {
+          try {
+            const { deleteFilesByPrefix } = await import('../backend/storageService.js');
+            await deleteFilesByPrefix(`projects/${projectId}`);
+          } catch (e) {
+            mediaCleanupWarnings++;
+            console.warn('Failed to delete project media', e);
+          }
+        }
+
         await deleteProject(projectId);
         if (typeof window.__invalidateHomeCache === 'function') window.__invalidateHomeCache();
         const { showToast } = await import('../utils/ui.js');
-        showToast('Project deleted', 'success');
+        showToast(
+          mediaCleanupWarnings > 0
+            ? 'Project deleted with media cleanup warnings'
+            : 'Project deleted',
+          mediaCleanupWarnings > 0 ? 'info' : 'success'
+        );
         window.location.hash = '#';
       } catch (err) {
         const { showToast } = await import('../utils/ui.js');
@@ -292,48 +309,166 @@ function buildStandaloneUnitData(unit, project) {
   return data;
 }
 
-function buildProjectMediaHtml(project) {
-  const mediaSections = [];
-  const entryMedia = Array.isArray(project.images?.entryToBuilding) ? project.images.entryToBuilding : [];
-  const presentationFiles = Array.isArray(project.images?.presentationFile) ? project.images.presentationFile : [];
-
-  if (entryMedia.length > 0) {
-    mediaSections.push(`
-      <div style="margin-top:var(--space-md)">
-        <div class="project-detail-info-label" style="margin-bottom:6px">Entry To Building</div>
-        <div style="display:flex; flex-direction:column; gap:6px">
-          ${entryMedia.map((url, index) => `
-            <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent-green);text-decoration:underline">
-              Open entry media ${index + 1}
-            </a>
-          `).join('')}
-        </div>
-      </div>
-    `);
-  }
-
-  if (presentationFiles.length > 0) {
-    mediaSections.push(`
-      <div style="margin-top:var(--space-md)">
-        <div class="project-detail-info-label" style="margin-bottom:6px">Presentation Files</div>
-        <div style="display:flex; flex-direction:column; gap:6px">
-          ${presentationFiles.map((url, index) => `
-            <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent-green);text-decoration:underline">
-              Open presentation file ${index + 1}
-            </a>
-          `).join('')}
-        </div>
-      </div>
-    `);
-  }
-
-  if (mediaSections.length === 0) return '';
-
+function renderMediaFileTile(url, caption = '') {
+  const kind = getFileKindLabel(url).toLowerCase();
   return `
-    <div class="project-detail-info">
-      ${mediaSections.join('')}
+    <div class="media-file-tile tile-${kind}">
+      <span class="media-file-tile-ext">${getFileExtensionLabel(url)}</span>
+      <span class="media-file-tile-kind">${getFileKindLabel(url)}</span>
+      ${caption ? `<span class="text-caption media-file-tile-caption">${caption}</span>` : ''}
     </div>
   `;
+}
+
+function getProjectMediaUrl(entry) {
+  if (!entry) return '';
+  if (typeof entry === 'string') return entry;
+  if (typeof entry?.url === 'string') return entry.url;
+  return '';
+}
+
+function buildProjectMediaView(project) {
+  const mediaOrder = ['buildingFacade', 'entryToBuilding', 'presentationFile'];
+  const mediaLabels = {
+    buildingFacade: 'Building Facade',
+    entryToBuilding: 'Entry to Building',
+    presentationFile: 'Presentation',
+  };
+
+  const mediaItems = [];
+  const categoriesHtml = mediaOrder.map((key) => {
+    const urls = (Array.isArray(project.images?.[key]) ? project.images[key] : [])
+      .map(getProjectMediaUrl)
+      .filter(Boolean);
+
+    if (urls.length === 0) return '';
+
+    urls.forEach((url) => mediaItems.push({ url, category: key }));
+
+    return `
+      <div style="margin-top: var(--space-md)">
+        <p class="text-label" style="margin-bottom: var(--space-xs); font-weight: 600; color: var(--text-secondary)">${mediaLabels[key]}</p>
+        <div class="photo-scroll-row">
+          ${urls.map((url) => `
+            <div class="photo-row-item" onclick="window.openLightbox('${url}')"
+              ${(isDocUrl(url) || isPdfUrl(url) || isCadUrl(url)) ? 'style="cursor:pointer;"' : ''}>
+              ${isVideoUrl(url)
+                ? `<video src="${url}" muted preload="metadata" style="width:100%;height:100%;object-fit:cover"></video>`
+                : isPdfUrl(url)
+                  ? renderMediaFileTile(url)
+                  : (isDocUrl(url) || isCadUrl(url))
+                    ? renderMediaFileTile(url)
+                    : `<img src="${url}" loading="lazy" />`
+              }
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const carouselHtml = mediaItems.length > 0 ? `
+    <div class="slider-container animate-enter">
+      <div class="slider-wrapper" id="project-media-slider">
+        ${mediaItems.map((item) => `
+          <div class="slider-item" onclick="window.openLightbox('${item.url}')">
+            ${isVideoUrl(item.url)
+              ? `<video src="${item.url}" muted preload="metadata" style="pointer-events:none"></video>`
+              : isPdfUrl(item.url)
+                ? renderMediaFileTile(item.url, 'Tap to open')
+                : (isDocUrl(item.url) || isCadUrl(item.url))
+                  ? renderMediaFileTile(item.url, isCadUrl(item.url) ? 'Tap to download CAD' : 'Tap to open')
+                  : `<img src="${item.url}" loading="eager" />`
+            }
+          </div>
+        `).join('')}
+      </div>
+      ${mediaItems.length > 1 ? `
+        <button class="slider-nav-btn slider-nav-prev" id="project-slider-prev" aria-label="Previous">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        </button>
+        <button class="slider-nav-btn slider-nav-next" id="project-slider-next" aria-label="Next">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+        </button>
+        <div class="slider-dots" id="project-slider-dots">
+          ${mediaItems.map((_, index) => `<div class="slider-dot ${index === 0 ? 'active' : ''}"></div>`).join('')}
+        </div>
+      ` : ''}
+    </div>
+  ` : '';
+
+  const explorerHtml = categoriesHtml ? `
+    <div style="margin-top: var(--space-lg)">
+      <div class="project-detail-info-label" style="margin-bottom: 8px">Media Explorer</div>
+      ${categoriesHtml}
+    </div>
+  ` : '';
+
+  return { mediaItems, carouselHtml, explorerHtml };
+}
+
+function attachProjectMediaInteractions(mediaItems) {
+  if (!Array.isArray(mediaItems) || mediaItems.length === 0) return;
+
+  window.openLightbox = (src) => {
+    if (isCadUrl(src)) {
+      openCadFile(src).catch((error) => {
+        console.warn('CAD open failed', error);
+      });
+      return;
+    }
+
+    if (isPdfUrl(src) || isDocUrl(src)) {
+      if (isDocUrl(src)) {
+        window.open(`https://docs.google.com/gview?url=${encodeURIComponent(src)}&embedded=false`, '_blank', 'noopener');
+      } else {
+        window.open(src, '_blank', 'noopener');
+      }
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'lightbox-overlay active';
+    const isVideo = isVideoUrl(src);
+    overlay.innerHTML = `
+      ${isVideo
+        ? `<video src="${src}" class="lightbox-img" controls autoplay style="max-width:90%;max-height:90%"></video>`
+        : `<img src="${src}" class="lightbox-img" />`
+      }
+      <button class="lightbox-close">&times;</button>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.lightbox-close').onclick = () => {
+      const video = overlay.querySelector('video');
+      if (video) video.pause();
+      overlay.remove();
+    };
+    overlay.onclick = (event) => {
+      if (event.target === overlay) {
+        const video = overlay.querySelector('video');
+        if (video) video.pause();
+        overlay.remove();
+      }
+    };
+  };
+
+  const slider = document.getElementById('project-media-slider');
+  const dots = document.querySelectorAll('#project-slider-dots .slider-dot');
+
+  if (!slider) return;
+
+  if (dots.length > 0) {
+    slider.onscroll = () => {
+      const index = Math.round(slider.scrollLeft / slider.offsetWidth);
+      dots.forEach((dot, dotIndex) => dot.classList.toggle('active', dotIndex === index));
+    };
+  }
+
+  const prevBtn = document.getElementById('project-slider-prev');
+  const nextBtn = document.getElementById('project-slider-next');
+
+  if (prevBtn) prevBtn.onclick = () => slider.scrollBy({ left: -slider.offsetWidth, behavior: 'smooth' });
+  if (nextBtn) nextBtn.onclick = () => slider.scrollBy({ left: slider.offsetWidth, behavior: 'smooth' });
 }
 
 function buildUnitCard(unit, parentProject = null) {

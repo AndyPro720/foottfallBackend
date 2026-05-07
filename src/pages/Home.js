@@ -65,8 +65,109 @@ function hasValue(value) {
   return value !== undefined && value !== null && value !== '';
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function formatCompactFloorLabel(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const normalized = raw.toLowerCase();
+  if (['g', 'gf', 'ground', 'ground floor'].includes(normalized)) return 'G';
+  if (['lg', 'lower ground', 'lower ground floor'].includes(normalized)) return 'LG';
+  if (['ug', 'upper ground', 'upper ground floor'].includes(normalized)) return 'UG';
+
+  const basementMatch = normalized.match(/^b(?:asement)?\s*(\d+)?$/);
+  if (basementMatch) return basementMatch[1] ? `B${basementMatch[1]}` : 'B';
+
+  const numericMatch = normalized.match(/-?\d+/);
+  if (numericMatch) return `${numericMatch[0]}F`;
+
+  return raw.length > 8 ? raw.slice(0, 8) : raw;
+}
+
+function formatCompactSqft(value) {
+  if (!hasValue(value)) return '';
+
+  const numericValue = Number(value);
+  if (Number.isFinite(numericValue)) {
+    if (numericValue >= 1000) {
+      const compactValue = numericValue / 1000;
+      const formatted = compactValue >= 10
+        ? Math.round(compactValue).toString()
+        : compactValue.toFixed(1).replace(/\.0$/, '');
+      return `${formatted}k`;
+    }
+    return `${Math.round(numericValue)}`;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return '';
+  return raw.replace(/\s*sq\.?\s*ft\.?$/i, '').trim();
+}
+
+function getFloorSortRank(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return Number.MAX_SAFE_INTEGER;
+  if (['lg', 'lower ground', 'lower ground floor'].includes(normalized)) return -1;
+  if (['g', 'gf', 'ground', 'ground floor'].includes(normalized)) return 0;
+  if (['ug', 'upper ground', 'upper ground floor'].includes(normalized)) return 0.5;
+
+  const basementMatch = normalized.match(/^b(?:asement)?\s*(\d+)?$/);
+  if (basementMatch) {
+    return -10 - Number(basementMatch[1] || 0);
+  }
+
+  const numericMatch = normalized.match(/-?\d+/);
+  if (numericMatch) return Number(numericMatch[0]);
+
+  return Number.MAX_SAFE_INTEGER - 1;
+}
+
+function buildProjectUnitPreviewHtml(projectId, allUnits = []) {
+  const previewUnits = (allUnits || [])
+    .filter(unit => unit.projectId === projectId)
+    .sort((a, b) => {
+      const floorDiff = getFloorSortRank(a.floor) - getFloorSortRank(b.floor);
+      if (floorDiff !== 0) return floorDiff;
+      return String(a.unitName || a.name || '').localeCompare(String(b.unitName || b.name || ''));
+    })
+    .map((unit) => {
+      const floorLabel = formatCompactFloorLabel(unit.floor);
+      const sizeLabel = formatCompactSqft(unit.size);
+      if (!floorLabel && !sizeLabel) return null;
+
+      const label = [floorLabel, sizeLabel].filter(Boolean).join(' · ');
+      const unitName = unit.unitName || unit.name || 'Unit';
+      return {
+        label,
+        title: `${unitName}: ${label}`,
+      };
+    })
+    .filter(Boolean);
+
+  if (previewUnits.length === 0) return '';
+
+  const visibleUnits = previewUnits.slice(0, 4);
+  const remainingCount = previewUnits.length - visibleUnits.length;
+
+  return `
+    <div class="project-unit-preview" aria-label="Sample units in this project">
+      ${visibleUnits.map((unit) => `
+        <span class="project-unit-pill" title="${escapeHtml(unit.title)}">${escapeHtml(unit.label)}</span>
+      `).join('')}
+      ${remainingCount > 0 ? `<span class="project-unit-more">+${remainingCount}</span>` : ''}
+    </div>
+  `;
 }
 
 function getVisibleProjects(projects = cachedProjects || []) {
@@ -839,8 +940,14 @@ function attachHomeInteractions(container, renderFn) {
         cachedItems = cachedItems.filter(i => !ids.includes(i.id));
         exitSelectionMode();
         try {
-          await Promise.all(ids.map(id => deleteInventoryItem(id)));
-          showToast(`Deleted ${ids.length} properties`, 'success');
+          const results = await Promise.all(ids.map(id => deleteInventoryItem(id)));
+          const cleanupWarnings = results.filter(result => result?.mediaCleanupFailed).length;
+          showToast(
+            cleanupWarnings > 0
+              ? `Deleted ${ids.length} properties (${cleanupWarnings} media cleanup warning${cleanupWarnings !== 1 ? 's' : ''})`
+              : `Deleted ${ids.length} properties`,
+            cleanupWarnings > 0 ? 'info' : 'success'
+          );
         } catch (err) {
           showToast('Delete failed: ' + err.message, 'error');
         }
@@ -1272,9 +1379,10 @@ function closeFilterPanel() {
 
 function buildProjectCardHtml(project, index, allUnits = []) {
   const location = [project.tradeArea, project.city].filter(Boolean).join(', ');
-  const typeBadge = project.buildingType ? `<span style="font-size:10px;padding:2px 6px;border-radius:var(--radius-sm);background:var(--bg-overlay);color:var(--text-secondary)">${project.buildingType}</span>` : '';
+  const typeBadge = project.buildingType ? `<span style="font-size:10px;padding:2px 6px;border-radius:var(--radius-sm);background:var(--bg-overlay);color:var(--text-secondary)">${escapeHtml(project.buildingType)}</span>` : '';
   const unitCount = project.unitCount || 0;
   const isBroker = String(project.contactDesignation || '').toLowerCase() === 'broker';
+  const unitPreviewHtml = buildProjectUnitPreviewHtml(project.id, allUnits);
 
   // Thumbnail logic with unit fallback
   const facadeImages = project.images?.buildingFacade || [];
@@ -1306,7 +1414,7 @@ function buildProjectCardHtml(project, index, allUnits = []) {
   if (thumbUrl) {
     thumbHtml = `
       <div class="card-thumbnail-wrapper">
-        <img class="card-thumbnail" src="${thumbUrl}" alt="${project.name || ''}" loading="lazy">
+        <img class="card-thumbnail" src="${thumbUrl}" alt="${escapeHtml(project.name || '')}" loading="lazy">
         ${isBroker ? '<div class="agent-source-marker" style="top:8px;right:8px" title="Broker" aria-label="Broker">B</div>' : ''}
       </div>
     `;
@@ -1316,14 +1424,15 @@ function buildProjectCardHtml(project, index, allUnits = []) {
     <a href="#project/${project.id}" class="card card-interactive project-card animate-enter" style="--delay:${index * 60}ms; display:flex; gap:var(--space-md); align-items:center; padding:var(--space-md); text-decoration:none; cursor:pointer; position:relative; margin-bottom:var(--space-sm)">
       ${thumbHtml}
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:var(--text-sm);margin-bottom:2px">${project.name || 'Unnamed Project'}</div>
-        <div style="font-size:12px;color:var(--text-secondary)">${location || 'No location set'}</div>
+        <div style="font-weight:600;font-size:var(--text-sm);margin-bottom:2px">${escapeHtml(project.name || 'Unnamed Project')}</div>
+        <div style="font-size:12px;color:var(--text-secondary)">${escapeHtml(location || 'No location set')}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
           <div style="display:flex;align-items:center;gap:var(--space-sm)">
             <span class="project-unit-count" style="font-weight:500; font-size:12px">${unitCount} unit${unitCount !== 1 ? 's' : ''}</span>
             ${typeBadge}
           </div>
         </div>
+        ${unitPreviewHtml}
       </div>
       <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="flex-shrink:0;color:var(--text-tertiary)">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>

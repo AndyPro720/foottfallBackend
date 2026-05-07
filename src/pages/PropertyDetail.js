@@ -9,6 +9,7 @@ import {
   isPdfUrl,
   isVideoUrl,
 } from '../utils/media.js';
+import { openCadFile } from '../utils/fileActions.js';
 
 function getNormalizedGoogleMapLink(item) {
   const rawLink = String(item.googleMapsLink || '').trim();
@@ -162,63 +163,6 @@ function renderFileTile(url, caption = '') {
       ${caption ? `<span class="text-caption media-file-tile-caption">${caption}</span>` : ''}
     </div>
   `;
-}
-
-function deriveDownloadFilename(url, fallbackBase = 'file') {
-  try {
-    const parsed = new URL(url);
-    const pathMatch = parsed.pathname.match(/\/o\/(.+)$/);
-    if (pathMatch?.[1]) {
-      const decoded = decodeURIComponent(pathMatch[1]);
-      const parts = decoded.split('/');
-      const last = parts[parts.length - 1];
-      if (last) return last;
-    }
-
-    const pathnameParts = parsed.pathname.split('/');
-    const lastPathPart = pathnameParts[pathnameParts.length - 1];
-    if (lastPathPart) return decodeURIComponent(lastPathPart);
-  } catch (_) {
-    // Ignore parse issues and use fallback below.
-  }
-
-  const extension = getFileExtensionLabel(url).toLowerCase();
-  return `${fallbackBase}.${extension}`;
-}
-
-async function triggerCadDownload(url) {
-  const filename = deriveDownloadFilename(url, 'cad-file');
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Download failed (${response.status})`);
-    }
-
-    const blob = await response.blob();
-    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        files: [file],
-        title: filename,
-        text: 'Save or open the CAD file on your device.',
-      });
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = filename;
-    anchor.rel = 'noopener';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-  } catch (error) {
-    window.open(url, '_blank', 'noopener');
-  }
 }
 
 function buildPropertyInformationSummary(item, priorityLocationValue) {
@@ -675,7 +619,9 @@ export const renderPropertyDetail = async (container, id) => {
 
     window.openLightbox = (src) => {
       if (isCadUrl(src)) {
-        triggerCadDownload(src);
+        openCadFile(src).catch((error) => {
+          console.warn('CAD open failed', error);
+        });
         return;
       }
 
@@ -791,8 +737,13 @@ export const renderPropertyDetail = async (container, id) => {
       const { showToast } = await import('../utils/ui.js');
       if (confirm('Are you sure you want to delete this property? This action is permanent.')) {
         try {
-          await deleteInventoryItem(id);
-          showToast('Property deleted successfully', 'success');
+          const result = await deleteInventoryItem(id);
+          showToast(
+            result?.mediaCleanupFailed
+              ? 'Property deleted with media cleanup warnings'
+              : 'Property deleted successfully',
+            result?.mediaCleanupFailed ? 'info' : 'success'
+          );
           window.location.hash = '#';
         } catch (err) {
           showToast('Failed to delete property', 'error');

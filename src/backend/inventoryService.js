@@ -5,6 +5,7 @@ import {
 import { db, auth } from "./firebaseConfig.js";
 import { getCurrentUserRole } from "./userRoleService.js";
 import { validateInventoryPayload } from "./inventoryValidator.js";
+import { deleteFilesByPrefix } from "./storageService.js";
 
 const INVENTORY_COLLECTION = "inventory";
 
@@ -402,6 +403,16 @@ export async function deleteInventoryItem(id) {
   try {
     const docRef = doc(db, INVENTORY_COLLECTION, id);
     await deleteDoc(docRef);
+    try {
+      await deleteFilesByPrefix(`properties/${id}`);
+      return { mediaCleanupFailed: false };
+    } catch (mediaError) {
+      console.warn("Property media cleanup failed after document deletion:", mediaError);
+      return {
+        mediaCleanupFailed: true,
+        mediaCleanupError: mediaError.message || "Storage cleanup failed",
+      };
+    }
   } catch (error) {
     console.error("Error deleting inventory item:", error);
     throw error;

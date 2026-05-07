@@ -1,6 +1,6 @@
 import { getInventoryItemById, updateInventoryItem, getInventoryItems } from '../backend/inventoryService.js';
 import { getProjectById, updateProject } from '../backend/projectService.js';
-import { uploadMultipleFiles } from '../backend/storageService.js';
+import { deleteFile, uploadMultipleFiles } from '../backend/storageService.js';
 import { createUploadSession, addUploadLog } from '../components/UploadTracker.js';
 import { SECTIONS, PROJECT_SECTIONS, PROJECT_FIELD_NAMES, UNIT_ONLY_SECTIONS } from '../config/propertyFields.js';
 import { heicTo } from 'heic-to';
@@ -74,6 +74,19 @@ function isDocumentNotReadyError(error) {
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function arrayDifference(source = [], kept = []) {
+  const keptSet = new Set((kept || []).filter(Boolean));
+  return (source || []).filter((value) => Boolean(value) && !keptSet.has(value));
+}
+
+async function cleanupRemovedMediaUrls(urls = []) {
+  const uniqueUrls = [...new Set((urls || []).filter(Boolean))];
+  if (uniqueUrls.length === 0) return 0;
+
+  const results = await Promise.allSettled(uniqueUrls.map((url) => deleteFile(url)));
+  return results.filter((result) => result.status === 'rejected').length;
 }
 
 let currentType = 'property';
@@ -733,6 +746,7 @@ export const renderEditProperty = async (container, id, type = 'property') => {
     try {
       const data = {};
       const fileFields = [];
+      const removedMediaUrls = [];
       const getSelectedFiles = (uploadKey, inputEl) => {
         const snapshot = selectedFilesByUpload.get(uploadKey);
         if (Array.isArray(snapshot) && snapshot.length > 0) {
@@ -759,21 +773,28 @@ export const renderEditProperty = async (container, id, type = 'property') => {
             }
             // Check if existing facility photo was removed
             const preview = container.querySelector(`[data-previews="${field.name}Photo"] .file-preview-item`);
-            if (!preview && item[`${field.name}Photo`]) {
+            const existingFacilityPhotoUrl = item[`${field.name}Photo`];
+            if (!preview && existingFacilityPhotoUrl) {
               data[`${field.name}Photo`] = null;
+              removedMediaUrls.push(existingFacilityPhotoUrl);
             }
             if (field.hasPhoto && isYes) {
               const fileInput = container.querySelector(`[data-upload="${field.name}Photo"] input[data-main-upload="true"]`);
               const selected = getSelectedFiles(`${field.name}Photo`, fileInput);
               if (selected.length > 0) {
+                if (existingFacilityPhotoUrl) {
+                  removedMediaUrls.push(existingFacilityPhotoUrl);
+                }
                 fileFields.push({ name: field.name, files: selected, isFacility: true });
               }
             }
           } else if (field.type === 'file') {
+            const originalUrls = Array.isArray(item.images?.[field.name]) ? item.images[field.name] : [];
             // Collect remaining existing URLs
             const remaining = Array.from(container.querySelectorAll(`[data-previews="${field.name}"] .file-remove-btn`))
                                    .map(b => b.dataset.url);
             data[`images.${field.name}`] = remaining;
+            removedMediaUrls.push(...arrayDifference(originalUrls, remaining));
 
             const fileInput = container.querySelector(`[data-upload="${field.name}"] input[data-main-upload="true"]`);
             const selected = getSelectedFiles(field.name, fileInput);
@@ -810,6 +831,7 @@ export const renderEditProperty = async (container, id, type = 'property') => {
       }
 
       data.mediaUploadPending = fileFields.length > 0;
+      const uniqueRemovedMediaUrls = [...new Set(removedMediaUrls.filter(Boolean))];
 
       // Handle new photo uploads with background sync
       if (fileFields.length > 0) {
@@ -878,6 +900,13 @@ export const renderEditProperty = async (container, id, type = 'property') => {
             window.__invalidateHomeCache();
           }
 
+          const cleanupFailures = await cleanupRemovedMediaUrls(uniqueRemovedMediaUrls);
+          if (cleanupFailures > 0) {
+            addUploadLog(`Media cleanup incomplete (${cleanupFailures} file${cleanupFailures !== 1 ? 's' : ''} failed)`, 'error');
+          } else if (uniqueRemovedMediaUrls.length > 0) {
+            addUploadLog(`Removed ${uniqueRemovedMediaUrls.length} old media file${uniqueRemovedMediaUrls.length !== 1 ? 's' : ''}`, 'done');
+          }
+
           const { done, errors } = session.summary;
           if (hadUploadFailure) {
             addUploadLog(`⚠ ${done} uploaded, ${errors} failed`, 'error');
@@ -904,7 +933,13 @@ export const renderEditProperty = async (container, id, type = 'property') => {
       }
 
       await updateItemWithRetry(id, data);
-      showToast(`${currentType === 'project' ? 'Project' : 'Property'} updated successfully`, 'success');
+      const cleanupFailures = await cleanupRemovedMediaUrls(uniqueRemovedMediaUrls);
+      showToast(
+        cleanupFailures > 0
+          ? `${currentType === 'project' ? 'Project' : 'Property'} updated with media cleanup warnings`
+          : `${currentType === 'project' ? 'Project' : 'Property'} updated successfully`,
+        cleanupFailures > 0 ? 'info' : 'success'
+      );
       window.location.hash = currentType === 'project' ? `#project/${id}` : `#property/${id}`;
     } catch (err) {
       console.error(err);

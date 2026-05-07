@@ -2516,6 +2516,38 @@ body.ios-pwa {
   font-weight: 500;
 }
 
+.project-unit-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.project-unit-pill,
+.project-unit-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.project-unit-pill {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.project-unit-more {
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
 /* Projects section label on home */
 .home-section-label {
   font-size: var(--text-xs);
@@ -2704,4 +2736,3 @@ body.ios-pwa {
 .back-btn:hover {
   color: var(--text-primary);
 }
-
