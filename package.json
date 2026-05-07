@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "usage:snapshot": "node scripts/usageSnapshot.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
